@@ -153,3 +153,21 @@ npm run lint
 - Selection state persists during session
 - Empty state shown when no playlists found
 - Error state shown if fetch fails
+
+## Bug Fixes
+
+### Null Images Error (2026-01-04)
+
+**Issue**: When some Spotify playlists have `images: null` in the API response, the dashboard crashed with `Uncaught TypeError: e.images is null`.
+
+**Root Cause**: `PlaylistCard.tsx` was accessing `playlist.images[0]?.url` without optional chaining on the `images` property itself.
+
+**Fix Applied**:
+- `components/Dashboard/PlaylistCard.tsx:13`: Changed `playlist.images[0]?.url` to `playlist.images?.[0]?.url`
+- `next.config.ts`: Added Spotify CDN domains to `remotePatterns` for Next.js Image optimization:
+  - `i.scdn.co`
+  - `image-cdn-ak.spotifycdn.com`
+  - `image-cdn-fa.spotifycdn.com`
+  - `mosaic.scdn.co`
+
+**Fallback Behavior**: When playlist has no images or images is null, displays `/file.svg` placeholder.

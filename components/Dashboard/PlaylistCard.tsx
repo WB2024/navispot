@@ -10,7 +10,7 @@ interface PlaylistCardProps {
 }
 
 export function PlaylistCard({ playlist, isSelected, onToggle }: PlaylistCardProps) {
-  const coverImage = playlist.images[0]?.url || '/file.svg';
+  const coverImage = playlist.images?.[0]?.url || '/file.svg';
   const trackCount = playlist.tracks.total;
 
   return (
