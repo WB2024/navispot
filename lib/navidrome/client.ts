@@ -10,6 +10,17 @@ export function generateAuthHeader(username: string, password: string): string {
   return `Basic ${encoded}`;
 }
 
+export function normalizeSearchQuery(query: string): string {
+  return query
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[''`´']/g, '')  // Remove various apostrophe characters
+    .replace(/[^a-z0-9\s]/g, ' ')  // Replace special chars with spaces
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export class NavidromeApiClient {
   private baseUrl: string;
   private authHeader: string;
@@ -160,7 +171,9 @@ export class NavidromeApiClient {
     artistOffset?: number;
     albumOffset?: number;
   }): Promise<NavidromeSong[]> {
-    const params: Record<string, string | string[]> = { ...this._getAuthParams(), query };
+    const normalizedQuery = normalizeSearchQuery(query);
+    
+    const params: Record<string, string | string[]> = { ...this._getAuthParams(), query: normalizedQuery };
 
     if (options?.songCount !== undefined) {
       params.songCount = String(options.songCount);
@@ -186,14 +199,7 @@ export class NavidromeApiClient {
       'subsonic-response': { searchResult3: SearchResult3 };
     }>(url);
 
-    const songs = response['subsonic-response']?.searchResult3?.song || [];
-    console.log(`[Navidrome Search] Query: "${query}"`);
-    console.log(`[Navidrome Search] Found ${songs.length} songs in response`);
-    if (songs.length > 0) {
-      console.log(`[Navidrome Search] First song: "${songs[0].title}" by "${songs[0].artist}"`);
-    }
-    
-    return songs;
+    return response['subsonic-response']?.searchResult3?.song || [];
   }
 
   async searchByISRC(isrc: string): Promise<NavidromeSong | null> {

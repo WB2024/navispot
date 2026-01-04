@@ -50,12 +50,33 @@ The `calculateSimilarity` function converts Levenshtein distance to a normalized
 
 ### Track-Level Matching
 
-The `calculateTrackSimilarity` function combines artist and title similarities:
+The `calculateTrackSimilarity` function combines artist, title, duration, and album similarities:
 
-- Calculates separate similarity scores for artist and title
-- Applies 40% weight to artist similarity
-- Applies 60% weight to title similarity
+- Calculates separate similarity scores for artist, title, duration, and album
+- Applies 25% weight to artist similarity
+- Applies 35% weight to title similarity
+- Applies 25% weight to duration similarity
+- Applies 15% weight to album similarity
 - Returns combined score from 0.0 to 1.0
+
+#### Duration Similarity
+
+The `calculateDurationSimilarity` function compares track durations to improve matching accuracy:
+
+- **Less than 3 seconds difference**: High similarity boost (0.9-1.0)
+- **3 or more seconds difference**: Penalty applied based on difference magnitude
+- Maximum penalty is capped at 1 minute difference
+
+This helps distinguish between different versions of the same song (radio edit vs album version) and reject clearly different tracks.
+
+#### Album Name Normalization
+
+The `normalizeAlbumName` function strips common soundtrack-related words:
+
+- Removes words like "original", "soundtrack", "score", "OST", "complete", "vol", "volume", "disc"
+- Helps match albums across different naming conventions
+
+The `calculateAlbumSimilarity` function then compares the normalized album names.
 
 #### Exact Title Match Boost
 
@@ -70,14 +91,19 @@ The boosted scoring logic:
 ```
 if titleSimilarity === 1.0:
     if artistSimilarity >= 0.3:
-        score = max(artistSimilarity × 0.3 + titleSimilarity × 0.7, 0.85)
+        score = max(artistSimilarity × 0.2 + titleSimilarity × 0.4 + durationSimilarity × 0.3 + albumSimilarity × 0.1, 0.85)
     else:
-        score = max(artistSimilarity × 0.2 + titleSimilarity × 0.8, 0.75)
+        score = max(artistSimilarity × 0.15 + titleSimilarity × 0.45 + durationSimilarity × 0.3 + albumSimilarity × 0.1, 0.75)
 else:
-    score = artistSimilarity × 0.4 + titleSimilarity × 0.6
+    score = artistSimilarity × 0.25 + titleSimilarity × 0.35 + durationSimilarity × 0.25 + albumSimilarity × 0.15
 ```
 
 This ensures that tracks with exact title matches are more likely to be matched even when artist names differ substantially, while still requiring some minimum artist similarity for a confident match.
+
+#### Additional Boosts
+
+- **Duration boost**: If duration similarity >= 0.9 (within 3 seconds), adds +0.1 to the base score
+- **Album boost**: If album similarity >= 0.8 AND (title >= 0.6 OR artist >= 0.4), adds +0.05 to the base score
 
 ### Configurable Threshold Matching
 
@@ -106,7 +132,12 @@ This file contains all fuzzy matching functionality:
 - `normalizeString()` - String normalization utility
 - `levenshteinDistance()` - Edit distance calculation
 - `calculateSimilarity()` - Normalized similarity scoring (0-1)
-- `calculateTrackSimilarity()` - Track-level similarity combining artist and title
+- `calculateDurationSimilarity()` - Duration-based similarity with 3-second threshold
+- `normalizeAlbumName()` - Album name normalization for soundtrack common words
+- `calculateAlbumSimilarity()` - Album name similarity after normalization
+- `normalizeTitle()` - Title normalization removing live recording indicators
+- `calculateTitleSimilarity()` - Title similarity with live indicator normalization
+- `calculateTrackSimilarity()` - Track-level similarity combining artist, title, duration, and album
 - `findBestMatch()` - Main matching function with threshold filtering
 
 ## Usage Examples
@@ -197,6 +228,81 @@ function calculateSimilarity(str1: string, str2: string): number
 
 **Returns:** A normalized similarity score between 0.0 and 1.0, where 1.0 indicates identical strings.
 
+### Function: calculateDurationSimilarity
+
+```typescript
+function calculateDurationSimilarity(
+  spotifyDurationMs: number,
+  navidromeDurationSeconds: number
+): number
+```
+
+**Parameters:**
+- `spotifyDurationMs` (number) - Duration of the Spotify track in milliseconds
+- `navidromeDurationSeconds` (number) - Duration of the Navidrome song in seconds
+
+**Returns:** A similarity score between 0.0 and 1.0:
+- Returns 0.9-1.0 if duration difference is less than 3 seconds
+- Returns lower values with penalty for larger differences
+
+### Function: normalizeAlbumName
+
+```typescript
+function normalizeAlbumName(album: string): string
+```
+
+**Parameters:**
+- `album` (string) - The album name to normalize
+
+**Returns:** A normalized album name with common soundtrack words removed ("original", "soundtrack", "score", "OST", etc.)
+
+### Function: calculateAlbumSimilarity
+
+```typescript
+function calculateAlbumSimilarity(
+  spotifyAlbum: string,
+  navidromeAlbum: string
+): number
+```
+
+**Parameters:**
+- `spotifyAlbum` (string) - The Spotify album name
+- `navidromeAlbum` (string) - The Navidrome album name
+
+**Returns:** A similarity score between 0.0 and 1.0 based on normalized album name comparison.
+
+### Function: normalizeTitle
+
+```typescript
+function normalizeTitle(title: string): string
+```
+
+**Parameters:**
+- `title` (string) - The track title to normalize
+
+**Returns:** A normalized title with live recording indicators removed. Removes patterns like:
+- ` (live)`, `- live`, ` [live]`, ` live`
+- `(live)`, `-live`, `[live]`, `live`
+
+This handles variations like:
+- "Song Name - Live" → "song name"
+- "Song Name (Live)" → "song name"
+
+### Function: calculateTitleSimilarity
+
+```typescript
+function calculateTitleSimilarity(
+  spotifyTitle: string,
+  navidromeTitle: string
+): number
+```
+
+**Parameters:**
+- `spotifyTitle` (string) - The Spotify track title
+- `navidromeTitle` (string) - The Navidrome song title
+
+**Returns:** A similarity score between 0.0 and 1.0 based on normalized title comparison. Uses `normalizeTitle()` to strip live indicators before comparison.
+
 ### Function: calculateTrackSimilarity
 
 ```typescript
@@ -210,7 +316,13 @@ function calculateTrackSimilarity(
 - `spotifyTrack` (SpotifyTrack) - The Spotify track to match
 - `navidromeSong` (NavidromeSong) - The Navidrome song to compare
 
-**Returns:** A weighted similarity score combining artist (40%) and title (60%) similarity.
+**Returns:** A weighted similarity score combining:
+- Artist similarity (25%)
+- Title similarity (35%)
+- Duration similarity (25%)
+- Album similarity (15%)
+
+Includes boosts for exact title matches and close duration matches.
 
 ### Function: findBestMatch
 
@@ -289,34 +401,58 @@ This produces a score where:
 The combined track similarity uses weighted averaging by default:
 
 ```
-trackSimilarity = (artistSimilarity × 0.4) + (titleSimilarity × 0.6)
+trackSimilarity = (artistSimilarity × 0.25) + (titleSimilarity × 0.35) + (durationSimilarity × 0.25) + (albumSimilarity × 0.15)
 ```
 
-Title matching is weighted higher because:
-- Song titles are more distinctive identifiers
-- Artist names often have more variation (articles, abbreviations)
-- Title accuracy is typically more important for correct matching
+Weight distribution rationale:
+- **Title (35%)**: Song titles are the most distinctive identifiers
+- **Artist (25%)**: Important for differentiating between different artists' songs with similar titles
+- **Duration (25%)**: Helps distinguish between different versions of the same song
+- **Album (15%)**: Additional signal especially useful for soundtrack/album matching
 
-### Exact Title Match Boost
+### Duration-Based Matching
 
-When a title matches exactly (similarity = 1.0), the algorithm applies a scoring boost to handle cases where artist names differ significantly. This addresses a common issue where:
+Duration similarity uses a 3-second threshold:
 
-- Spotify lists the full composer/artist name (e.g., "Martin O'Donnell, Michael Salvatori")
-- Navidrome lists a simplified artist name (e.g., "Halo")
-- The original weighted formula would reject the match due to low artist similarity
+- **< 3 seconds difference**: High similarity (0.9-1.0), provides a boost to the overall score
+- **≥ 3 seconds difference**: Penalty applied, reducing the similarity score
 
-**Example:**
-- Spotify track: "Halo" by "Martin O'Donnell, Michael Salvatori"
-- Navidrome song: "Halo" by "Halo"
-- Without boost: ~0.64 similarity (rejected at 0.8 threshold)
-- With boost: ~0.85+ similarity (accepted as match)
+This helps handle cases where:
+- Radio edits differ slightly from album versions
+- Different pressings or remasters have slight length variations
+- Live versions are clearly different from studio recordings
 
-This boost is applied conditionally:
-1. If title similarity is 1.0 AND artist similarity >= 0.3: boost to minimum 0.85
-2. If title similarity is 1.0 AND artist similarity < 0.3: boost to minimum 0.75
-3. Otherwise: use standard weighted formula
+### Album Name Normalization
 
-The minimum thresholds ensure that even with the boost, the match still has a reasonable confidence level.
+Before comparing album names, common soundtrack-related words are stripped:
+
+```typescript
+const SOUNDTRACK_WORDS = [
+  'original', 'sound', 'track', 'ost', ' soundtrack', 'score',
+  'complete', 'vol', 'volume', ' disc ', 'disk'
+];
+```
+
+This allows matching:
+- "Halo: Combat Evolved (Original Soundtrack)" with "Halo: Combat Evolved"
+- "The Matrix (Original Motion Picture Score)" with "The Matrix"
+
+### Title Normalization for Live Recordings
+
+Track titles often have live recording indicators in different formats. The `normalizeTitle()` function standardizes these:
+
+```typescript
+const LIVE_INDICATORS = [
+  ' (live)', '- live', ' [live]', ' live',
+  '(live)', '-live', '[live]', 'live'
+];
+```
+
+This handles variations like:
+- "Bemistir Kiberign - Live" → "bemistir kiberign"
+- "Bemistir Kiberign (Live)" → "bemistir kiberign"
+
+This is especially useful for classical music, jazz, and live concert recordings where the same performance might be labeled differently across sources.
 
 ### Ambiguity Detection
 
@@ -357,6 +493,12 @@ The Fuzzy Matching feature is in turn a dependency for:
    - Same title, very different artists should get boosted score
    - Example: "Halo" by "Martin O'Donnell" vs "Halo" by "Halo"
 10. **Classical/Soundtrack matching**: Test tracks where composer differs from performer
+11. **Duration matching**: Test that tracks within 3 seconds get boosted
+    - Example: "Hey Jude" (431s) vs "Hey Jude" (428s) should have high duration similarity
+12. **Album name normalization**: Test soundtrack album matching
+    - Example: "The Matrix (Original Soundtrack)" vs "The Matrix" should match
+13. **Title live indicator normalization**: Test that live variants are matched
+    - Example: "Bemistir Kiberign - Live" vs "Bemistir Kiberign (Live)" should match
 
 ## Verification Results
 
@@ -378,6 +520,9 @@ The code passes all ESLint checks with the project's configuration. This include
 
 **Update Notes (January 4, 2026):**
 - Added exact title match boost to handle cases where artist names differ significantly
-- This fixes matching issues with classical music, video game soundtracks, and soundtracks
+- Added duration-based matching with 3-second threshold for better track version detection
+- Added album name normalization to handle soundtrack naming conventions
+- Added album similarity scoring to improve soundtrack/classical music matching
+- Added title normalization to handle live recording indicator variations
 - Added debug logging for troubleshooting matching issues
-- Updated testing recommendations to cover exact title match scenarios
+- Updated testing recommendations to cover all new matching scenarios

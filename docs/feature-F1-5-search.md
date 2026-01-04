@@ -55,6 +55,42 @@ This file contains the type definitions for search functionality:
 This file contains the search method implementation:
 
 - `search` - Async method that searches for songs in Navidrome and returns matching `NavidromeSong` objects
+- `normalizeSearchQuery` - Utility function that normalizes search queries for better matching
+
+### lib/navidrome/client.ts
+
+This file contains the search functionality:
+
+#### normalizeSearchQuery Function
+
+The `normalizeSearchQuery` function prepares search queries for the Navidrome API:
+
+```typescript
+export function normalizeSearchQuery(query: string): string
+```
+
+**Normalization Steps:**
+1. Converts to lowercase
+2. Applies Unicode NFD normalization
+3. Removes diacritical marks (accents, umlauts, etc.)
+4. Removes various apostrophe characters (`'`, `` ```, `´`)
+5. Replaces remaining special characters with spaces
+6. Collapses multiple spaces to single space
+7. Trims leading/trailing whitespace
+
+**Purpose:** Improves search results by handling common variations:
+- Accented characters: "Naïve" → "naive"
+- Apostrophes: "Henock's Practice Room" → "henocks practice room"
+- Special characters: "Song - Title!" → "song title"
+
+**Example:**
+```typescript
+const original = "Henock's Practice Room - Bemistir Kiberign (Live)";
+const normalized = normalizeSearchQuery(original);
+// Result: "henocks practice room bemistir kiberign live"
+```
+
+This normalization is automatically applied to all search queries in the `search` method.
 
 ## Usage Examples
 
@@ -103,6 +139,24 @@ async function findBestMatch(spotifyTrack: SpotifyTrack): Promise<NavidromeSong 
 ```
 
 ## API Reference
+
+### Function: normalizeSearchQuery
+
+```typescript
+function normalizeSearchQuery(query: string): string
+```
+
+**Parameters:**
+- `query` (string) - The raw search query string
+
+**Returns:** A normalized search query string optimized for Navidrome's search engine.
+
+**Behavior:**
+- Converts to lowercase
+- Removes diacritical marks using Unicode NFD normalization
+- Removes apostrophe characters (handles various apostrophe types)
+- Replaces special characters with spaces
+- Normalizes whitespace
 
 ### Method: search
 
@@ -195,4 +249,10 @@ The code passes all ESLint checks with the project's configuration. This include
 
 **Last Verified:** January 4, 2026
 
-The Search Functionality feature is fully implemented and verified. All sub-tasks have been completed, the code passes static analysis checks, and the implementation is ready for use by dependent features.
+**Last Updated:** January 4, 2026
+
+**Update Notes (January 4, 2026):**
+- Added `normalizeSearchQuery` function to improve search matching
+- Handles apostrophes in artist names (e.g., "Henock's Practice Room")
+- Removes diacritical marks for better cross-platform matching
+- Automatically applies normalization to all search queries

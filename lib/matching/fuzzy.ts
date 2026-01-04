@@ -6,6 +6,10 @@ export interface FuzzyMatchOptions {
 export interface FuzzyMatchResult {
   song: import('@/types/navidrome').NavidromeSong;
   score: number;
+  details?: {
+    durationDiff: number;
+    albumSimilarity: number;
+  };
 }
 
 export interface FuzzyMatchCandidateResult {
@@ -68,6 +72,98 @@ export function calculateSimilarity(str1: string, str2: string): number {
   return 1.0 - distance / maxLength;
 }
 
+const DURATION_THRESHOLD_MS = 3000;
+
+export function calculateDurationSimilarity(
+  spotifyDurationMs: number,
+  navidromeDurationSeconds: number
+): number {
+  const navidromeDurationMs = navidromeDurationSeconds * 1000;
+  const diff = Math.abs(spotifyDurationMs - navidromeDurationMs);
+
+  if (diff < DURATION_THRESHOLD_MS) {
+    const similarity = 1.0 - (diff / DURATION_THRESHOLD_MS);
+    return Math.max(similarity, 0.9);
+  }
+
+  const penalty = Math.min(diff / 60000, 1);
+  return 1.0 - penalty;
+}
+
+const SOUNDTRACK_WORDS = [
+  'original', 'sound', 'track', 'ost', ' soundtrack', 'score',
+  'complete', 'vol', 'volume', ' disc ', 'disk'
+];
+
+const LIVE_INDICATORS = [
+  ' (live)',
+  '- live',
+  ' [live]',
+  ' live',
+  '(live)',
+  '-live',
+  '[live]',
+  'live'
+];
+
+export function normalizeAlbumName(album: string): string {
+  let normalized = album.toLowerCase();
+  for (const word of SOUNDTRACK_WORDS) {
+    normalized = normalized.replace(new RegExp(word, 'gi'), ' ');
+  }
+  normalized = normalizeString(normalized);
+  return normalized.replace(/\s+/g, ' ').trim();
+}
+
+export function normalizeTitle(title: string): string {
+  let normalized = title.toLowerCase();
+  for (const indicator of LIVE_INDICATORS) {
+    normalized = normalized.replace(new RegExp(indicator.replace(/[()]/g, '\\$&'), 'gi'), ' ');
+  }
+  normalized = normalizeString(normalized);
+  return normalized.replace(/\s+/g, ' ').trim();
+}
+
+export function calculateAlbumSimilarity(
+  spotifyAlbum: string,
+  navidromeAlbum: string
+): number {
+  const normalizedSpotify = normalizeAlbumName(spotifyAlbum);
+  const normalizedNavidrome = normalizeAlbumName(navidromeAlbum);
+
+  if (normalizedSpotify === normalizedNavidrome) return 1.0;
+
+  const spotifyParts = normalizedSpotify.split(' ').filter(p => p.length > 0);
+  const navidromeParts = normalizedNavidrome.split(' ').filter(p => p.length > 0);
+
+  if (spotifyParts.length === 0 || navidromeParts.length === 0) return 0;
+
+  const matchingParts = spotifyParts.filter(part =>
+    navidromeParts.some(nPart => nPart.includes(part) || part.includes(nPart))
+  );
+
+  const similarity = matchingParts.length / Math.max(spotifyParts.length, navidromeParts.length);
+  return similarity * 0.8;
+}
+
+export function calculateTitleSimilarity(
+  spotifyTitle: string,
+  navidromeTitle: string
+): number {
+  const normalizedSpotify = normalizeTitle(spotifyTitle);
+  const normalizedNavidrome = normalizeTitle(navidromeTitle);
+
+  if (normalizedSpotify === normalizedNavidrome) {
+    return 1.0;
+  }
+
+  const maxLength = Math.max(normalizedSpotify.length, normalizedNavidrome.length);
+  if (maxLength === 0) return 1.0;
+
+  const distance = levenshteinDistance(normalizedSpotify, normalizedNavidrome);
+  return 1.0 - distance / maxLength;
+}
+
 export function calculateTrackSimilarity(
   spotifyTrack: import('@/types/spotify').SpotifyTrack,
   navidromeSong: import('@/types/navidrome').NavidromeSong
@@ -77,24 +173,39 @@ export function calculateTrackSimilarity(
     navidromeSong.artist
   );
 
-  const titleSimilarity = calculateSimilarity(
+  const titleSimilarity = calculateTitleSimilarity(
     spotifyTrack.name,
     navidromeSong.title
   );
 
-  // If title is an exact match, boost the score significantly
-  // This helps with classical/video game music where artist names might differ
+  const durationSimilarity = calculateDurationSimilarity(
+    spotifyTrack.duration_ms,
+    navidromeSong.duration
+  );
+
+  const albumSimilarity = calculateAlbumSimilarity(
+    spotifyTrack.album.name,
+    navidromeSong.album
+  );
+
+  let baseSimilarity = artistSimilarity * 0.25 + titleSimilarity * 0.35 + durationSimilarity * 0.25 + albumSimilarity * 0.15;
+
   if (titleSimilarity === 1.0) {
-    // Give more weight to title when it's an exact match
-    // and artist similarity is at least somewhat reasonable
     if (artistSimilarity >= 0.3) {
-      return Math.max(artistSimilarity * 0.3 + titleSimilarity * 0.7, 0.85);
+      return Math.max(artistSimilarity * 0.2 + titleSimilarity * 0.4 + durationSimilarity * 0.3 + albumSimilarity * 0.1, 0.85);
     }
-    // Even with very different artists, if title matches exactly, consider it a good match
-    return Math.max(artistSimilarity * 0.2 + titleSimilarity * 0.8, 0.75);
+    return Math.max(artistSimilarity * 0.15 + titleSimilarity * 0.45 + durationSimilarity * 0.3 + albumSimilarity * 0.1, 0.75);
   }
 
-  return artistSimilarity * 0.4 + titleSimilarity * 0.6;
+  if (durationSimilarity >= 0.9) {
+    baseSimilarity = Math.min(baseSimilarity + 0.1, 0.95);
+  }
+
+  if (albumSimilarity >= 0.8 && (titleSimilarity >= 0.6 || artistSimilarity >= 0.4)) {
+    baseSimilarity = Math.min(baseSimilarity + 0.05, 0.95);
+  }
+
+  return baseSimilarity;
 }
 
 export function findBestMatch(
@@ -103,45 +214,30 @@ export function findBestMatch(
   threshold: number = 0.8
 ): FuzzyMatchCandidateResult {
   if (candidates.length === 0) {
-    console.log(`[Fuzzy Match] No candidates found for track: "${spotifyTrack.name}" by ${spotifyTrack.artists.map(a => a.name).join(', ')}`);
     return { matches: [], hasAmbiguous: false };
   }
 
-  console.log(`[Fuzzy Match] Processing ${candidates.length} candidates for track: "${spotifyTrack.name}" by ${spotifyTrack.artists.map(a => a.name).join(', ')}`);
-
   const scoredMatches: FuzzyMatchResult[] = candidates
-    .map((song) => ({
-      song,
-      score: calculateTrackSimilarity(spotifyTrack, song),
-    }))
-    .filter((match) => {
-      if (match.score >= threshold) {
-        return true;
-      }
-      // Log songs that were close to the threshold
-      if (match.score >= threshold - 0.1) {
-        console.log(`[Fuzzy Match] Close call (${match.score.toFixed(3)} < ${threshold}): "${match.song.title}" by "${match.song.artist}"`);
-      }
-      return false;
+    .map((song) => {
+      const albumSim = calculateAlbumSimilarity(
+        spotifyTrack.album.name,
+        song.album
+      );
+      const score = calculateTrackSimilarity(spotifyTrack, song);
+
+      return {
+        song,
+        score,
+        details: {
+          durationDiff: Math.abs(spotifyTrack.duration_ms - song.duration * 1000),
+          albumSimilarity: albumSim,
+        }
+      };
     })
+    .filter((match) => match.score >= threshold)
     .sort((a, b) => b.score - a.score);
 
-  console.log(`[Fuzzy Match] Found ${scoredMatches.length} matches above threshold ${threshold}`);
-  if (scoredMatches.length > 0) {
-    console.log(`[Fuzzy Match] Best match: "${scoredMatches[0].song.title}" by "${scoredMatches[0].song.artist}" with score ${scoredMatches[0].score.toFixed(3)}`);
-  }
-
   if (scoredMatches.length === 0) {
-    // Show the top candidate even if it didn't make the threshold
-    const allScores = candidates.map(song => ({
-      song,
-      score: calculateTrackSimilarity(spotifyTrack, song)
-    })).sort((a, b) => b.score - a.score);
-    
-    if (allScores.length > 0) {
-      console.log(`[Fuzzy Match] No matches above threshold. Top candidate: "${allScores[0].song.title}" by "${allScores[0].song.artist}" with score ${allScores[0].score.toFixed(3)}`);
-    }
-    
     return { matches: [], hasAmbiguous: false };
   }
 

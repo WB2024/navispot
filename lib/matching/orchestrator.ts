@@ -69,13 +69,11 @@ export async function matchTrack(
 
   if (opts.enableFuzzy) {
     const searchQuery = `${spotifyTrack.artists.map((a) => a.name).join(' ')} ${spotifyTrack.name}`;
-    console.log(`[Matching] Fuzzy search for: "${searchQuery}"`);
     const candidates = await client.search(
       searchQuery,
       { songCount: opts.maxFuzzyCandidates }
     );
 
-    console.log(`[Matching] Received ${candidates.length} candidates from search`);
     const fuzzyResult = findBestMatch(spotifyTrack, candidates, opts.fuzzyThreshold);
     const matchResult: MatchingStrategyResult = {
       strategy: 'fuzzy',

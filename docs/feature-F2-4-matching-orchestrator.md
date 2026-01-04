@@ -356,5 +356,7 @@ The code passes all ESLint checks with the project's configuration. This include
 **Update Notes (January 4, 2026):**
 - Added comprehensive debug logging to aid troubleshooting
 - Updated fuzzy matching to handle exact title matches with different artist names
+- Added duration-based matching (3-second threshold) for better track version detection
+- Added album name normalization and similarity scoring for soundtrack matching
 - Improved matching for classical music, video game soundtracks, and soundtracks
-- Log output now shows search queries, candidate counts, and match scores
+- Log output now shows search queries, candidate counts, duration differences, and match scores
