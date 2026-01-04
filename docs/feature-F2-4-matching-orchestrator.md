@@ -46,6 +46,25 @@ interface TrackMatch {
 
 When fuzzy matching returns multiple close candidates (within 0.05 of the best score), the result is marked as 'ambiguous' with all candidates included for manual review.
 
+### Debug Logging
+
+The matching process includes comprehensive debug logging to aid troubleshooting:
+
+- **Search queries**: Shows the query sent to Navidrome for fuzzy matching
+- **Candidate counts**: Reports how many candidates were returned
+- **Match scores**: Logs similarity scores for each candidate
+- **Match decisions**: Shows why matches were accepted or rejected
+- **Close calls**: Logs candidates that were close to the threshold
+
+Example log output:
+```
+[Matching] Fuzzy search for: "Halo Martin O'Donnell Michael Salvatori Halo"
+[Matching] Received 20 candidates from search
+[Fuzzy Match] Processing 20 candidates for track: "Halo" by "Martin O'Donnell, Michael Salvatori"
+[Fuzzy Match] Found 1 matches above threshold 0.8
+[Fuzzy Match] Best match: "Halo" by "Halo" with score 0.867
+```
+
 ## File Structure
 
 ```
@@ -332,6 +351,10 @@ The code passes all ESLint checks with the project's configuration. This include
 
 **Status:** Completed
 
-**Last Verified:** January 4, 2026
+**Last Updated:** January 4, 2026
 
-The Matching Orchestrator feature is fully implemented and verified. All sub-tasks have been completed, the code passes static analysis checks, and the implementation is ready for use by dependent features.
+**Update Notes (January 4, 2026):**
+- Added comprehensive debug logging to aid troubleshooting
+- Updated fuzzy matching to handle exact title matches with different artist names
+- Improved matching for classical music, video game soundtracks, and soundtracks
+- Log output now shows search queries, candidate counts, and match scores

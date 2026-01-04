@@ -57,6 +57,28 @@ The `calculateTrackSimilarity` function combines artist and title similarities:
 - Applies 60% weight to title similarity
 - Returns combined score from 0.0 to 1.0
 
+#### Exact Title Match Boost
+
+For tracks where the title is an exact match (similarity = 1.0), the algorithm applies a special boost to handle cases where artist names differ significantly. This is particularly useful for:
+
+- **Classical music**: Composer names may differ from performer names
+- **Video game soundtracks**: Artist may be listed as "Halo" instead of "Martin O'Donnell, Michael Salvatori"
+- **Soundtrack albums**: Various artist naming conventions
+
+The boosted scoring logic:
+
+```
+if titleSimilarity === 1.0:
+    if artistSimilarity >= 0.3:
+        score = max(artistSimilarity × 0.3 + titleSimilarity × 0.7, 0.85)
+    else:
+        score = max(artistSimilarity × 0.2 + titleSimilarity × 0.8, 0.75)
+else:
+    score = artistSimilarity × 0.4 + titleSimilarity × 0.6
+```
+
+This ensures that tracks with exact title matches are more likely to be matched even when artist names differ substantially, while still requiring some minimum artist similarity for a confident match.
+
 ### Configurable Threshold Matching
 
 The `findBestMatch` function implements the core matching logic:
@@ -264,7 +286,7 @@ This produces a score where:
 
 ### Track Matching Weights
 
-The combined track similarity uses weighted averaging:
+The combined track similarity uses weighted averaging by default:
 
 ```
 trackSimilarity = (artistSimilarity × 0.4) + (titleSimilarity × 0.6)
@@ -274,6 +296,27 @@ Title matching is weighted higher because:
 - Song titles are more distinctive identifiers
 - Artist names often have more variation (articles, abbreviations)
 - Title accuracy is typically more important for correct matching
+
+### Exact Title Match Boost
+
+When a title matches exactly (similarity = 1.0), the algorithm applies a scoring boost to handle cases where artist names differ significantly. This addresses a common issue where:
+
+- Spotify lists the full composer/artist name (e.g., "Martin O'Donnell, Michael Salvatori")
+- Navidrome lists a simplified artist name (e.g., "Halo")
+- The original weighted formula would reject the match due to low artist similarity
+
+**Example:**
+- Spotify track: "Halo" by "Martin O'Donnell, Michael Salvatori"
+- Navidrome song: "Halo" by "Halo"
+- Without boost: ~0.64 similarity (rejected at 0.8 threshold)
+- With boost: ~0.85+ similarity (accepted as match)
+
+This boost is applied conditionally:
+1. If title similarity is 1.0 AND artist similarity >= 0.3: boost to minimum 0.85
+2. If title similarity is 1.0 AND artist similarity < 0.3: boost to minimum 0.75
+3. Otherwise: use standard weighted formula
+
+The minimum thresholds ensure that even with the boost, the match still has a reasonable confidence level.
 
 ### Ambiguity Detection
 
@@ -310,6 +353,10 @@ The Fuzzy Matching feature is in turn a dependency for:
 6. **Ambiguity**: Verify ambiguous detection with close candidates
 7. **Empty strings**: Handle edge cases gracefully
 8. **Performance**: Test with long artist/title strings
+9. **Exact title match with different artists**: Verify boost is applied correctly
+   - Same title, very different artists should get boosted score
+   - Example: "Halo" by "Martin O'Donnell" vs "Halo" by "Halo"
+10. **Classical/Soundtrack matching**: Test tracks where composer differs from performer
 
 ## Verification Results
 
@@ -327,6 +374,10 @@ The code passes all ESLint checks with the project's configuration. This include
 
 **Status:** Completed
 
-**Last Verified:** January 4, 2026
+**Last Updated:** January 4, 2026
 
-The Fuzzy Matching feature is fully implemented and verified. All sub-tasks have been completed, the code passes static analysis checks, and the implementation is ready for use by dependent features.
+**Update Notes (January 4, 2026):**
+- Added exact title match boost to handle cases where artist names differ significantly
+- This fixes matching issues with classical music, video game soundtracks, and soundtracks
+- Added debug logging for troubleshooting matching issues
+- Updated testing recommendations to cover exact title match scenarios

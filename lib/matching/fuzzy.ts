@@ -82,6 +82,18 @@ export function calculateTrackSimilarity(
     navidromeSong.title
   );
 
+  // If title is an exact match, boost the score significantly
+  // This helps with classical/video game music where artist names might differ
+  if (titleSimilarity === 1.0) {
+    // Give more weight to title when it's an exact match
+    // and artist similarity is at least somewhat reasonable
+    if (artistSimilarity >= 0.3) {
+      return Math.max(artistSimilarity * 0.3 + titleSimilarity * 0.7, 0.85);
+    }
+    // Even with very different artists, if title matches exactly, consider it a good match
+    return Math.max(artistSimilarity * 0.2 + titleSimilarity * 0.8, 0.75);
+  }
+
   return artistSimilarity * 0.4 + titleSimilarity * 0.6;
 }
 
@@ -91,18 +103,45 @@ export function findBestMatch(
   threshold: number = 0.8
 ): FuzzyMatchCandidateResult {
   if (candidates.length === 0) {
+    console.log(`[Fuzzy Match] No candidates found for track: "${spotifyTrack.name}" by ${spotifyTrack.artists.map(a => a.name).join(', ')}`);
     return { matches: [], hasAmbiguous: false };
   }
+
+  console.log(`[Fuzzy Match] Processing ${candidates.length} candidates for track: "${spotifyTrack.name}" by ${spotifyTrack.artists.map(a => a.name).join(', ')}`);
 
   const scoredMatches: FuzzyMatchResult[] = candidates
     .map((song) => ({
       song,
       score: calculateTrackSimilarity(spotifyTrack, song),
     }))
-    .filter((match) => match.score >= threshold)
+    .filter((match) => {
+      if (match.score >= threshold) {
+        return true;
+      }
+      // Log songs that were close to the threshold
+      if (match.score >= threshold - 0.1) {
+        console.log(`[Fuzzy Match] Close call (${match.score.toFixed(3)} < ${threshold}): "${match.song.title}" by "${match.song.artist}"`);
+      }
+      return false;
+    })
     .sort((a, b) => b.score - a.score);
 
+  console.log(`[Fuzzy Match] Found ${scoredMatches.length} matches above threshold ${threshold}`);
+  if (scoredMatches.length > 0) {
+    console.log(`[Fuzzy Match] Best match: "${scoredMatches[0].song.title}" by "${scoredMatches[0].song.artist}" with score ${scoredMatches[0].score.toFixed(3)}`);
+  }
+
   if (scoredMatches.length === 0) {
+    // Show the top candidate even if it didn't make the threshold
+    const allScores = candidates.map(song => ({
+      song,
+      score: calculateTrackSimilarity(spotifyTrack, song)
+    })).sort((a, b) => b.score - a.score);
+    
+    if (allScores.length > 0) {
+      console.log(`[Fuzzy Match] No matches above threshold. Top candidate: "${allScores[0].song.title}" by "${allScores[0].song.artist}" with score ${allScores[0].score.toFixed(3)}`);
+    }
+    
     return { matches: [], hasAmbiguous: false };
   }
 

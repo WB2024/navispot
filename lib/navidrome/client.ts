@@ -186,7 +186,14 @@ export class NavidromeApiClient {
       'subsonic-response': { searchResult3: SearchResult3 };
     }>(url);
 
-    return response['subsonic-response']?.searchResult3?.song || [];
+    const songs = response['subsonic-response']?.searchResult3?.song || [];
+    console.log(`[Navidrome Search] Query: "${query}"`);
+    console.log(`[Navidrome Search] Found ${songs.length} songs in response`);
+    if (songs.length > 0) {
+      console.log(`[Navidrome Search] First song: "${songs[0].title}" by "${songs[0].artist}"`);
+    }
+    
+    return songs;
   }
 
   async searchByISRC(isrc: string): Promise<NavidromeSong | null> {
