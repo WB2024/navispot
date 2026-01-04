@@ -4,7 +4,7 @@ import { spotifyRateLimiter } from './rate-limiter';
 
 const SPOTIFY_API_BASE = 'https://api.spotify.com/v1';
 
-class SpotifyClient {
+export class SpotifyClient {
   private token: SpotifyToken | null = null;
 
   setToken(token: SpotifyToken): void {
