@@ -47,3 +47,25 @@ The component uses the `useAuth` hook from `@/lib/auth/auth-context`:
 - `setNavidromeCredentials`: Tests and saves credentials
 - `clearNavidromeCredentials`: Clears stored credentials
 - `isLoading`: Handles initial auth loading state
+
+## Bug Fixes
+
+### January 4, 2026 - Infinite Loop on Credentials Submission
+
+Fixed an infinite loop that occurred when submitting Navidrome credentials:
+
+**Problem:** When users entered Navidrome credentials and clicked connect, the application would get stuck in an infinite loop of re-renders and state updates.
+
+**Root Cause:** Circular dependencies in React `useCallback` hooks in `lib/auth/auth-context.tsx`:
+1. `testNavidromeConnection` depended on `navidrome.credentials`
+2. `setNavidromeCredentials` depended on `testNavidromeConnection`
+3. When credentials changed, both callbacks were recreated, triggering state updates that recreated the callbacks again
+
+**Solution:**
+- Refactored `testNavidromeConnection` to accept credentials as a parameter with empty dependency array `[]`
+- Updated `setNavidromeCredentials` and `loadStoredAuth` to pass credentials directly
+- Updated the `testNavidromeConnection` type signature in `AuthContextType`
+
+**Files Modified:**
+- `lib/auth/auth-context.tsx`: Refactored callback dependencies
+- `types/auth-context.ts`: Updated function signature

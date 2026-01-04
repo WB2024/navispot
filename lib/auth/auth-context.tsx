@@ -22,8 +22,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   });
   const [isLoading, setIsLoading] = useState(true);
 
-  const testNavidromeConnection = useCallback(async (): Promise<boolean> => {
-    if (!navidrome.credentials) {
+  const testNavidromeConnection = useCallback(async (credentials: NavidromeCredentials): Promise<boolean> => {
+    if (!credentials) {
       setNavidrome((prev) => ({
         ...prev,
         isConnected: false,
@@ -35,9 +35,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     try {
       const client = new NavidromeApiClient(
-        navidrome.credentials.url,
-        navidrome.credentials.username,
-        navidrome.credentials.password
+        credentials.url,
+        credentials.username,
+        credentials.password
       );
       const result = await client.ping();
 
@@ -68,7 +68,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }));
       return false;
     }
-  }, [navidrome.credentials]);
+  }, []);
 
   const loadStoredAuth = useCallback(async () => {
     try {
@@ -93,7 +93,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           ...prev,
           credentials: parsed,
         }));
-        await testNavidromeConnection();
+        await testNavidromeConnection(parsed);
       }
     } catch (error) {
       console.error('Error loading stored auth:', error);
@@ -174,16 +174,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [spotify.user]);
 
   const setNavidromeCredentials = useCallback(async (credentials: NavidromeCredentials): Promise<boolean> => {
-    setNavidrome((prev) => ({ ...prev, error: null }));
-    
+    setNavidrome((prev) => ({ ...prev, error: null, credentials }));
+
     try {
       localStorage.setItem(NAVIDROME_STORAGE_KEY, JSON.stringify(credentials));
-      setNavidrome((prev) => ({
-        ...prev,
-        credentials,
-      }));
 
-      const success = await testNavidromeConnection();
+      const success = await testNavidromeConnection(credentials);
       return success;
     } catch (error) {
       console.error('Error setting Navidrome credentials:', error);

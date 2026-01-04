@@ -13,10 +13,14 @@ export function generateAuthHeader(username: string, password: string): string {
 export class NavidromeApiClient {
   private baseUrl: string;
   private authHeader: string;
+  private username: string;
+  private password: string;
 
   constructor(url: string, username: string, password: string) {
     this.baseUrl = url.replace(/\/$/, '');
     this.authHeader = generateAuthHeader(username, password);
+    this.username = username;
+    this.password = password;
   }
 
   async ping(): Promise<{
@@ -25,7 +29,12 @@ export class NavidromeApiClient {
     error?: string;
   }> {
     try {
-      const url = this._buildUrl('/rest/ping', {});
+      const url = this._buildUrl('/rest/ping', {
+        u: this.username,
+        p: this.password,
+        v: '1.16.1',
+        c: 'navispot-plist',
+      });
       const response = await this._makeRequest<{ status: string; version: string; serverVersion?: string }>(url);
       
       if (response.status === 'ok') {
@@ -200,6 +209,8 @@ export class NavidromeApiClient {
         searchParams.set(key, value);
       }
     });
+
+    searchParams.set('f', 'json');
 
     const queryString = searchParams.toString();
     return queryString

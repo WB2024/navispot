@@ -16,7 +16,9 @@ The client implements Base64 encoding for Basic Authentication, which is the req
 
 ### Subsonic Ping Endpoint Test
 
-The `ping` method provides a way to verify connectivity and authentication with the Navidrome server. It calls the `/rest/ping` endpoint and returns a result indicating whether the server is reachable and authenticated. The method returns an object containing a success flag, the server version when successful, and an error message when failed. This is typically used during the initial setup to validate user credentials before attempting other operations.
+The `ping` method provides a way to verify connectivity and authentication with the Navidrome server. It calls the `/rest/ping` endpoint with required Subsonic API parameters (username, password, version, client) and returns a result indicating whether the server is reachable and authenticated. The method returns an object containing a success flag, the server version when successful, and an error message when failed. This is typically used during the initial setup to validate user credentials before attempting other operations.
+
+**Note:** The Subsonic API requires authentication parameters even for the ping endpoint. The client stores username and password as instance properties to include `u` (username), `p` (password), `v` (API version), and `c` (client name) parameters in all requests.
 
 ### getPlaylists Wrapper
 
@@ -58,13 +60,16 @@ This file contains the complete implementation of the Navidrome API client:
 
 - `generateAuthHeader` - Standalone function for creating Base64 auth headers
 - `NavidromeApiClient` - Main class encapsulating all client functionality
-  - Constructor - Initializes base URL and auth header from credentials
-  - `ping` - Tests server connectivity and authentication
+  - Constructor - Initializes base URL and auth header from credentials, stores username/password for API requests
+  - `ping` - Tests server connectivity and authentication with required Subsonic parameters
   - `getPlaylists` - Retrieves all playlists from the server
   - `getPlaylist` - Retrieves a single playlist with its tracks
   - `createPlaylist` - Creates a new playlist with optional initial songs
   - `updatePlaylist` - Adds or removes songs from an existing playlist
-  - Private helper methods for URL building, request execution, response handling, and data mapping
+  - `search` - Searches for songs by query
+  - `searchByISRC` - Searches for songs by ISRC code
+  - `replacePlaylistSongs` - Replaces all songs in a playlist
+  - Private helper methods for URL building (includes `f=json` for JSON responses), request execution, response handling, and data mapping
 
 ## Usage Examples
 
@@ -165,7 +170,7 @@ constructor(url: string, username: string, password: string)
 - `username` (string) - The username for authentication
 - `password` (string) - The password for authentication
 
-**Behavior:** Normalizes the URL by removing trailing slashes and generates the auth header for all subsequent requests
+**Behavior:** Normalizes the URL by removing trailing slashes, generates the auth header for all subsequent requests, and stores the username and password as instance properties for use in Subsonic API parameters.
 
 #### Method: ping
 
@@ -242,6 +247,29 @@ async updatePlaylist(
 **Returns:** An object with a success flag
 
 **Error Handling:** Throws an error if the request fails
+
+## Bug Fixes
+
+### January 4, 2026 - Subsonic API Parameter and JSON Response Fixes
+
+Fixed two issues that prevented successful Navidrome connection:
+
+1. **Missing Subsonic API Parameters**: The Subsonic API requires authentication parameters (`u`, `p`, `v`, `c`) even for the ping endpoint. The client now stores username and password as instance properties and includes them in all API requests.
+
+2. **XML vs JSON Response**: The Subsonic API returns XML by default, but the client expected JSON. Added `f=json` parameter to all requests via the `_buildUrl` method to request JSON format responses.
+
+### January 4, 2026 - Auth Context Infinite Loop Fix
+
+Fixed an infinite loop in the auth context that occurred when entering Navidrome credentials:
+
+1. **Circular Dependency Issue**: The `testNavidromeConnection` and `setNavidromeCredentials` callbacks had circular dependencies through `navidrome.credentials`, causing continuous re-renders and re-creation of callbacks.
+
+2. **Solution**: Refactored `testNavidromeConnection` to accept credentials as a parameter instead of capturing them from closure, with an empty dependency array `[]` to maintain callback stability. Updated `setNavidromeCredentials` and `loadStoredAuth` to pass credentials directly to the test function.
+
+3. **Type Changes**: Updated `testNavidromeConnection` signature in `AuthContextType` to accept credentials as a parameter:
+   ```typescript
+   testNavidromeConnection: (credentials: NavidromeCredentials) => Promise<boolean>
+   ```
 
 ## Dependencies
 

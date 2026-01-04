@@ -21,7 +21,7 @@ export interface AuthContextType {
   spotifyLogout: () => Promise<void>;
   refreshSpotifyToken: () => Promise<boolean>;
   setNavidromeCredentials: (credentials: NavidromeCredentials) => Promise<boolean>;
-  testNavidromeConnection: () => Promise<boolean>;
+  testNavidromeConnection: (credentials: NavidromeCredentials) => Promise<boolean>;
   clearNavidromeCredentials: () => void;
   isLoading: boolean;
 }
