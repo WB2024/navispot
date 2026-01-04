@@ -1,17 +1,26 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/lib/auth/auth-context';
 import { spotifyClient } from '@/lib/spotify/client';
+import { NavidromeApiClient } from '@/lib/navidrome/client';
 import { SpotifyPlaylist } from '@/types/spotify';
 import { PlaylistCard } from './PlaylistCard';
+import { ProgressTracker, ProgressState } from '@/components/ProgressTracker';
+import { createBatchMatcher, BatchMatcherOptions } from '@/lib/matching/batch-matcher';
+import { createPlaylistExporter, PlaylistExporterOptions } from '@/lib/export/playlist-exporter';
 
 export function Dashboard() {
-  const { spotify } = useAuth();
+  const { spotify, navidrome } = useAuth();
   const [playlists, setPlaylists] = useState<SpotifyPlaylist[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [progressState, setProgressState] = useState<ProgressState | null>(null);
+  const [exportResults, setExportResults] = useState<{
+    playlistName: string;
+    statistics: { matched: number; unmatched: number; exported: number; failed: number };
+  } | null>(null);
 
   useEffect(() => {
     async function fetchPlaylists() {
@@ -49,10 +58,202 @@ export function Dashboard() {
     });
   };
 
+  const createInitialProgressState = (total: number): ProgressState => ({
+    phase: 'matching',
+    progress: { current: 0, total, percent: 0 },
+    statistics: { matched: 0, unmatched: 0, exported: 0, failed: 0 },
+  });
+
+  const updateProgress = useCallback((
+    state: ProgressState,
+    updates: Partial<ProgressState>
+  ): ProgressState => ({
+    ...state,
+    ...updates,
+    progress: { ...state.progress, ...(updates.progress || {}) },
+    statistics: { ...state.statistics, ...(updates.statistics || {}) },
+  }), []);
+
+  const handleExport = async () => {
+    if (!spotify.isAuthenticated || !spotify.token || !navidrome.credentials) {
+      setError('Please connect both Spotify and Navidrome to export playlists.');
+      return;
+    }
+
+    const selectedPlaylists = playlists.filter(p => selectedIds.has(p.id));
+    if (selectedPlaylists.length === 0) {
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setExportResults(null);
+
+    try {
+      spotifyClient.setToken(spotify.token);
+      const navidromeClient = new NavidromeApiClient(
+        navidrome.credentials.url,
+        navidrome.credentials.username,
+        navidrome.credentials.password
+      );
+
+      const batchMatcher = createBatchMatcher(spotifyClient, navidromeClient);
+      const playlistExporter = createPlaylistExporter(navidromeClient);
+
+      const matcherOptions: BatchMatcherOptions = {
+        enableISRC: true,
+        enableFuzzy: true,
+        enableStrict: true,
+        fuzzyThreshold: 0.8,
+      };
+
+      for (const playlist of selectedPlaylists) {
+        let progress = createInitialProgressState(0);
+
+        setProgressState(progress);
+
+        const tracks = await spotifyClient.getAllPlaylistTracks(playlist.id);
+        progress = updateProgress(progress, {
+          progress: { current: 0, total: tracks.length, percent: 0 },
+        });
+        setProgressState(progress);
+
+        const { matches, statistics } = await batchMatcher.matchTracks(
+          tracks.map(t => t.track),
+          matcherOptions,
+          async (batchProgress) => {
+            progress = updateProgress(progress, {
+              phase: 'matching',
+              currentTrack: batchProgress.currentTrack ? {
+                name: batchProgress.currentTrack.name,
+                artist: batchProgress.currentTrack.artists?.map(a => a.name).join(', ') || 'Unknown',
+                index: batchProgress.current - 1,
+                total: batchProgress.total,
+              } : undefined,
+              progress: {
+                current: batchProgress.current,
+                total: batchProgress.total,
+                percent: batchProgress.percent,
+              },
+              statistics: {
+                matched: statistics.matched,
+                unmatched: statistics.unmatched,
+                exported: 0,
+                failed: 0,
+              },
+            });
+            setProgressState({ ...progress });
+          }
+        );
+
+        progress = updateProgress(progress, {
+          phase: 'exporting',
+          progress: { current: 0, total: matches.length, percent: 0 },
+        });
+        setProgressState(progress);
+
+        const exporterOptions: PlaylistExporterOptions = {
+          mode: 'create',
+          skipUnmatched: false,
+          onProgress: async (exportProgress) => {
+            progress = updateProgress(progress, {
+              phase: exportProgress.status === 'completed' ? 'completed' : 'exporting',
+              progress: {
+                current: exportProgress.current,
+                total: exportProgress.total,
+                percent: exportProgress.percent,
+              },
+              statistics: {
+                matched: statistics.matched,
+                unmatched: statistics.unmatched,
+                exported: exportProgress.current,
+                failed: 0,
+              },
+            });
+            setProgressState({ ...progress });
+          },
+        };
+
+        const result = await playlistExporter.exportPlaylist(playlist.name, matches, exporterOptions);
+
+        setProgressState({
+          phase: 'completed',
+          progress: { current: result.statistics.total, total: result.statistics.total, percent: 100 },
+          statistics: {
+            matched: result.statistics.exported,
+            unmatched: result.statistics.skipped,
+            exported: result.statistics.exported,
+            failed: result.statistics.failed,
+          },
+        });
+
+        setExportResults({
+          playlistName: playlist.name,
+          statistics: {
+            matched: result.statistics.exported,
+            unmatched: result.statistics.skipped,
+            exported: result.statistics.exported,
+            failed: result.statistics.failed,
+          },
+        });
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Export failed';
+      setError(errorMessage);
+      setProgressState({
+        phase: 'error',
+        progress: { current: 0, total: 0, percent: 0 },
+        statistics: { matched: 0, unmatched: 0, exported: 0, failed: 0 },
+        error: errorMessage,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCancelExport = () => {
+    setProgressState(null);
+    setExportResults(null);
+  };
+
+  const handleCompleteExport = () => {
+    setLoading(false);
+  };
+
   if (!spotify.isAuthenticated) {
     return (
       <div className="flex min-h-[400px] items-center justify-center">
         <p className="text-gray-500">Please connect your Spotify account to view playlists.</p>
+      </div>
+    );
+  }
+
+  if (progressState) {
+    return (
+      <div className="py-8">
+        <div className="mb-6">
+          <button
+            onClick={handleCancelExport}
+            className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Back to Dashboard
+          </button>
+        </div>
+        <ProgressTracker
+          state={progressState}
+          onCancel={handleCancelExport}
+          onComplete={handleCompleteExport}
+        />
+        {exportResults && progressState.phase === 'completed' && (
+          <div className="mt-6 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+            <p className="text-sm text-green-700 dark:text-green-400">
+              Successfully exported {exportResults.statistics.exported} of {exportResults.statistics.matched + exportResults.statistics.unmatched} tracks to {exportResults.playlistName}
+            </p>
+          </div>
+        )}
       </div>
     );
   }
@@ -86,7 +287,8 @@ export function Dashboard() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
         <button
-          disabled={selectedIds.size === 0}
+          onClick={handleExport}
+          disabled={selectedIds.size === 0 || loading}
           className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Export Selected ({selectedIds.size})
