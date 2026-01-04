@@ -276,36 +276,22 @@ The `testNavidromeConnection` function accepts credentials as a parameter instea
 testNavidromeConnection: (credentials: NavidromeCredentials) => Promise<boolean>
 ```
 
-## Bug Fixes
+### Unified Authentication Parameters
 
-### Missing Authentication Parameters (2026-01-04)
+All Subsonic API methods include required authentication parameters via the `_getAuthParams()` helper method:
 
-**Issue**: When exporting playlists, the Navidrome API returned error `{"error":{"code":10,"message":"missing parameter: 'u'"}}`.
+```typescript
+private _getAuthParams(): Record<string, string> {
+  return {
+    u: this.username,
+    p: this.password,
+    v: '1.16.1',
+    c: 'navispot-plist',
+  };
+}
+```
 
-**Root Cause**: Most API methods (`getPlaylists`, `getPlaylist`, `createPlaylist`, `updatePlaylist`, `replacePlaylistSongs`, `search`, `searchByISRC`) were not including the required Subsonic authentication parameters (`u`, `p`, `v`, `c`) in their requests. Only the `ping` method had these parameters.
-
-**Fix Applied**:
-- Added `_getAuthParams()` private helper method to `lib/navidrome/client.ts:55-62`:
-  ```typescript
-  private _getAuthParams(): Record<string, string> {
-    return {
-      u: this.username,
-      p: this.password,
-      v: '1.16.1',
-      c: 'navispot-plist',
-    };
-  }
-  ```
-- Updated all API methods to include auth params:
-  - `getPlaylists`: `this._buildUrl('/rest/getPlaylists', this._getAuthParams())`
-  - `getPlaylist`: `{ ...this._getAuthParams(), id: playlistId }`
-  - `createPlaylist`: `{ ...this._getAuthParams(), name, ...songIds }`
-  - `updatePlaylist`: `{ ...this._getAuthParams(), id: playlistId, ... }`
-  - `replacePlaylistSongs`: `{ ...this._getAuthParams(), id: playlistId, ... }`
-  - `search`: `{ ...this._getAuthParams(), query, ... }`
-  - `searchByISRC`: `{ ...this._getAuthParams(), query: isrc, ... }`
-
-**Verification**: Export now works correctly with proper authentication.
+This ensures `getPlaylists`, `getPlaylist`, `createPlaylist`, `updatePlaylist`, `replacePlaylistSongs`, `search`, and `searchByISRC` all include `u`, `p`, `v`, and `c` parameters required by the Subsonic API.
 
 ## Dependencies
 

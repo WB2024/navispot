@@ -154,37 +154,29 @@ npm run lint
 - Empty state shown when no playlists found
 - Error state shown if fetch fails
 
-## Bug Fixes
+## Null-Safe Image Handling
 
-### Null Images Error (2026-01-04)
+The dashboard gracefully handles playlists with null or missing images using optional chaining:
 
-**Issue**: When some Spotify playlists have `images: null` in the API response, the dashboard crashed with `Uncaught TypeError: e.images is null`.
+```typescript
+playlist.images?.[0]?.url
+```
 
-**Root Cause**: `PlaylistCard.tsx` was accessing `playlist.images[0]?.url` without optional chaining on the `images` property itself.
+This ensures playlists with `images: null` in the API response don't cause crashes. When no images are available, the component displays the `/file.svg` placeholder.
 
-**Fix Applied**:
-- `components/Dashboard/PlaylistCard.tsx:13`: Changed `playlist.images[0]?.url` to `playlist.images?.[0]?.url`
-- `next.config.ts`: Added Spotify CDN domains to `remotePatterns` for Next.js Image optimization:
-  - `i.scdn.co`
-  - `image-cdn-ak.spotifycdn.com`
-  - `image-cdn-fa.spotifycdn.com`
-  - `mosaic.scdn.co`
+**Spotify CDN Configuration**: The Next.js Image component is configured to optimize images from Spotify CDN domains:
+- `i.scdn.co`
+- `image-cdn-ak.spotifycdn.com`
+- `image-cdn-fa.spotifycdn.com`
+- `mosaic.scdn.co`
 
-**Fallback Behavior**: When playlist has no images or images is null, displays `/file.svg` placeholder.
+## Safe Async Variable Access
 
-### Temporal Dead Zone Error (2026-01-04)
+The dashboard separates variable declaration from destructuring to avoid Temporal Dead Zone (TDZ) errors:
 
-**Issue**: During export, the UI showed error "Export failed. can't access lexical declaration 'l' before initialization" after matching tracks successfully.
+```typescript
+const { matches } = await batchMatcher.matchTracks(...);
+const statistics = getMatchStatistics(matches);
+```
 
-**Root Cause**: In `components/Dashboard/Dashboard.tsx`, the `statistics` variable was destructured inside the progress callback passed to `matchTracks()`. The callback was executed during the `await` call, but `statistics` was only assigned after `await` completed, causing a TDZ error when the callback tried to access `statistics.matched`.
-
-**Fix Applied**:
-- `components/Dashboard/Dashboard.tsx:12`: Added import for `getMatchStatistics` from orchestrator
-- `components/Dashboard/Dashboard.tsx:120-142`: Changed destructuring to separate statement:
-  ```typescript
-  const { matches } = await batchMatcher.matchTracks(...);
-  const statistics = getMatchStatistics(matches);
-  ```
-- Removed `statistics` access from the progress callback since it wasn't needed there anyway
-
-**Result**: Export progress tracking now works correctly without TDZ errors.
+This pattern ensures `statistics` is fully initialized before being accessed, preventing "can't access lexical declaration before initialization" errors during export operations.
