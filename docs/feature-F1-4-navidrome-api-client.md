@@ -248,41 +248,33 @@ async updatePlaylist(
 
 **Error Handling:** Throws an error if the request fails
 
-## Bug Fixes
+## Implementation Details
 
-### January 4, 2026 - Subsonic Response Parsing Fix
+### Subsonic Response Wrapper Handling
 
-Fixed a bug where the ping method incorrectly reported "Ping failed" even when the Navidrome server returned a successful response:
+The Subsonic API wraps all responses in a `subsonic-response` object. The client handles this transparently:
 
-1. **Subsonic Response Wrapper**: The Subsonic API wraps all responses in a `subsonic-response` object. The response structure is:
-   ```json
-   {"subsonic-response":{"status":"ok","version":"1.16.1","type":"navidrome","serverVersion":"0.59.0","openSubsonic":true}}
-   ```
+```json
+{"subsonic-response":{"status":"ok","version":"1.16.1","type":"navidrome","serverVersion":"0.59.0","openSubsonic":true}}
+```
 
-2. **Bug**: The ping method was checking `response.status` directly, which was `undefined` on the wrapped response, causing it to always return "Ping failed" even for successful connections.
+The ping method extracts data from the `subsonic-response` wrapper if present, otherwise uses the response directly. This ensures the code works with both wrapped and unwrapped response formats.
 
-3. **Solution**: Modified the ping method to extract data from the `subsonic-response` wrapper if present, otherwise use the response directly. This ensures the code works with both wrapped and unwrapped response formats.
+### Subsonic API Parameter Support
 
-### January 4, 2026 - Subsonic API Parameter and JSON Response Fixes
+The Subsonic API requires authentication parameters (`u`, `p`, `v`, `c`) even for the ping endpoint. The client stores username and password as instance properties and includes them in all API requests.
 
-Fixed two issues that prevented successful Navidrome connection:
+### JSON Response Format
 
-1. **Missing Subsonic API Parameters**: The Subsonic API requires authentication parameters (`u`, `p`, `v`, `c`) even for the ping endpoint. The client now stores username and password as instance properties and includes them in all API requests.
+The Subsonic API returns XML by default. The client requests JSON format by adding the `f=json` parameter to all requests via the `_buildUrl` method.
 
-2. **XML vs JSON Response**: The Subsonic API returns XML by default, but the client expected JSON. Added `f=json` parameter to all requests via the `_buildUrl` method to request JSON format responses.
+### Stable Callback Dependencies
 
-### January 4, 2026 - Auth Context Infinite Loop Fix
+The `testNavidromeConnection` function accepts credentials as a parameter instead of capturing them from closure, using an empty dependency array `[]` to maintain callback stability. The `setNavidromeCredentials` and `loadStoredAuth` functions pass credentials directly to the test function, preventing circular dependencies and infinite re-render loops.
 
-Fixed an infinite loop in the auth context that occurred when entering Navidrome credentials:
-
-1. **Circular Dependency Issue**: The `testNavidromeConnection` and `setNavidromeCredentials` callbacks had circular dependencies through `navidrome.credentials`, causing continuous re-renders and re-creation of callbacks.
-
-2. **Solution**: Refactored `testNavidromeConnection` to accept credentials as a parameter instead of capturing them from closure, with an empty dependency array `[]` to maintain callback stability. Updated `setNavidromeCredentials` and `loadStoredAuth` to pass credentials directly to the test function.
-
-3. **Type Changes**: Updated `testNavidromeConnection` signature in `AuthContextType` to accept credentials as a parameter:
-   ```typescript
-   testNavidromeConnection: (credentials: NavidromeCredentials) => Promise<boolean>
-   ```
+```typescript
+testNavidromeConnection: (credentials: NavidromeCredentials) => Promise<boolean>
+```
 
 ## Dependencies
 

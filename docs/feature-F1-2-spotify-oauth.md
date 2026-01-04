@@ -270,7 +270,7 @@ const playlists = await spotifyClient.getPlaylists();
 ✅ Callback handling and token exchange implemented
 ✅ Token refresh logic implemented (automatic + manual)
 ✅ Encrypted token storage in localStorage implemented
-✅ Reverse proxy redirect URL handling fixed
+✅ Reverse proxy support: Extracts `x-forwarded-host` and `x-forwarded-proto` headers for correct redirect URLs in containerized deployments
 
 ## References
 
