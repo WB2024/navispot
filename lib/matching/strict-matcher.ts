@@ -43,23 +43,17 @@ export async function matchByStrict(
   }
 
   try {
-    const artist = await client.getArtistByName(
-      spotifyTrack.artists.map((a) => a.name).join(' ')
-    );
+    const songs = await client.searchByTitle(spotifyTrack.name, 100);
+    const matches = filterStrictMatches(songs, normalizedArtist, normalizedTitle);
 
-    if (artist) {
-      const songs = await client.getAllSongsByArtist(artist.id);
-      const matches = filterStrictMatches(songs, normalizedArtist, normalizedTitle);
-
-      if (matches.length > 0) {
-        return {
-          spotifyTrack,
-          navidromeSong: convertNativeSongToNavidromeSong(matches[0]),
-          matchStrategy: 'strict',
-          matchScore: 1,
-          status: 'matched',
-        };
-      }
+    if (matches.length > 0) {
+      return {
+        spotifyTrack,
+        navidromeSong: convertNativeSongToNavidromeSong(matches[0]),
+        matchStrategy: 'strict',
+        matchScore: 1,
+        status: 'matched',
+      };
     }
 
     return {

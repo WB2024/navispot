@@ -23,31 +23,38 @@ export interface NavidromeNativeSong {
   id: string;
   title: string;
   artist: string;
-  album: string;
   artistId: string;
+  album: string;
   albumId: string;
   duration: number;
-  isrc?: string;
   year?: number;
+  date?: string;
   path?: string;
   trackNumber?: number;
   discNumber?: number;
   size?: number;
   suffix?: string;
   bitRate?: number;
-  contentType?: string;
+  sampleRate?: number;
+  bitDepth?: number;
+  channels?: number;
+  genre?: string;
+  genres?: Array<{ id: string; name: string }>;
+  orderTitle?: string;
+  orderAlbumName?: string;
+  orderArtistName?: string;
+  compilation?: boolean;
+  lyrics?: string;
+  isrc?: string[];
+  tags?: {
+    isrc?: string[];
+    genre?: string[];
+    copyright?: string[];
+    disctotal?: string[];
+    tracktotal?: string[];
+  };
   createdAt?: string;
   updatedAt?: string;
-  albumArtist?: string;
-  albumArtistId?: string;
-  genres?: string[];
-  comment?: string;
-  lyrics?: string;
-  playCount?: number;
-  playDate?: string;
-  lastPlayedAt?: string;
-  rating?: number;
-  mediaType?: string;
 }
 
 export interface NavidromeNativeArtist {

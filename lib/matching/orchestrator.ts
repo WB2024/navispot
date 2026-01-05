@@ -44,7 +44,7 @@ export function convertNativeSongToNavidromeSong(nativeSong: NavidromeNativeSong
     artist: nativeSong.artist,
     album: nativeSong.album,
     duration: nativeSong.duration,
-    isrc: nativeSong.isrc ? [nativeSong.isrc] : undefined,
+    isrc: nativeSong.tags?.isrc || nativeSong.isrc,
   };
 }
 
@@ -56,16 +56,13 @@ export async function matchTrack(
   const opts: MatchingOrchestratorOptions = { ...defaultMatchingOptions, ...options };
   const strategyResults: MatchingStrategyResult[] = [];
 
-  const firstArtist = spotifyTrack.artists[0]?.name || '';
+  const trackTitle = spotifyTrack.name;
 
   let candidates: NavidromeSong[] = [];
   let nativeCandidates: NavidromeNativeSong[] = [];
 
-  const artist = await client.getArtistByName(firstArtist);
-  if (artist) {
-    nativeCandidates = await client.getAllSongsByArtist(artist.id);
-    candidates = nativeCandidates.map(convertNativeSongToNavidromeSong);
-  }
+  nativeCandidates = await client.searchByTitle(trackTitle, opts.maxSearchResults);
+  candidates = nativeCandidates.map(convertNativeSongToNavidromeSong);
 
   const spotifyDurationSec = spotifyTrack.duration_ms / 1000;
 

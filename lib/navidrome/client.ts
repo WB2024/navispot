@@ -5,6 +5,7 @@ import {
   SearchOptions,
   NavidromeSearchResponse,
 } from '../../types/navidrome';
+import { stripTitleSuffix } from '@/lib/matching/fuzzy';
 
 export function generateAuthHeader(username: string, password: string): string {
   const credentials = `${username}:${password}`;
@@ -317,13 +318,20 @@ export class NavidromeApiClient {
         params._order = options._order;
       }
 
-      const response = await this._makeNativeRequest<NavidromeSearchResponse>('/api/song', params);
+      const response = await this._makeNativeRequest<NavidromeSearchResponse | NavidromeNativeSong[]>('/api/song', params);
       
-      if (response.items && response.items.length > 0) {
-        allSongs.push(...response.items);
+      let items: NavidromeNativeSong[] = [];
+      if (Array.isArray(response)) {
+        items = response;
+      } else if ('items' in response) {
+        items = response.items;
       }
 
-      if (allSongs.length >= this._totalCount || !response.items || response.items.length === 0) {
+      if (items.length > 0) {
+        allSongs.push(...items);
+      }
+
+      if (allSongs.length >= this._totalCount || items.length === 0) {
         break;
       }
 
@@ -339,7 +347,45 @@ export class NavidromeApiClient {
 
   async searchByTitle(title: string, limit?: number): Promise<NavidromeNativeSong[]> {
     const end = limit || 50;
-    return this.searchByQuery('', { title, _start: 0, _end: end });
+    
+    const strippedTitle = stripTitleSuffix(title);
+    let songs = await this.searchByQuery('', { title: strippedTitle, _start: 0, _end: end });
+    
+    if (songs.length === 0 && title !== strippedTitle) {
+      songs = await this.searchByQuery('', { title, _start: 0, _end: end });
+    }
+    
+    if (songs.length === 0 && title.includes('/')) {
+      const parts = title.split('/').map(p => p.trim()).filter(p => p.length > 0);
+      for (const part of parts) {
+        const partSongs = await this.searchByQuery('', { title: part, _start: 0, _end: end });
+        if (partSongs.length > 0) {
+          return partSongs;
+        }
+      }
+    }
+    
+    return songs;
+  }
+
+  async getSongByTitle(title: string): Promise<NavidromeNativeSong | null> {
+    try {
+      const params: Record<string, string | number | undefined> = {
+        title: title,
+        _start: 0,
+        _end: 1,
+      };
+
+      const response = await this._makeNativeRequest<NavidromeNativeSong[]>('/api/song', params);
+
+      if (Array.isArray(response) && response.length > 0) {
+        return response[0];
+      }
+
+      return null;
+    } catch {
+      return null;
+    }
   }
 
   async getArtistByName(artistName: string): Promise<NavidromeNativeArtist | null> {

@@ -133,6 +133,12 @@ const COLLABORATION_INDICATORS = [
   'DJ '
 ];
 
+const TITLE_SUFFIX_PATTERN = /[\(\[].*[\)\]].*$|[-–—~/].*$/;
+
+export function stripTitleSuffix(title: string): string {
+  return title.replace(TITLE_SUFFIX_PATTERN, '').trim();
+}
+
 export function normalizeAlbumName(album: string): string {
   let normalized = album.toLowerCase();
   for (const word of SOUNDTRACK_WORDS) {

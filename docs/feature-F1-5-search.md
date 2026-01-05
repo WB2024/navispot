@@ -20,10 +20,26 @@ This approach trades some performance for completeness, which is acceptable for 
 The search functionality serves as a foundational layer for the track matching process. The new native API implementation allows the application to:
 
 - **Search for songs by query** using the `/api/song` endpoint with server-side filtering
-- **Get all songs by a specific artist** through the `getAllSongsByArtist` method
+- **Search by song title** using the `searchByTitle` method with intelligent fallback
 - **Handle pagination automatically** to fetch complete result sets without manual iteration
 - **Know total result counts upfront** via the `x-total-count` response header
 - **Apply client-side matching** across the full result set for accurate track identification
+
+#### Title Search with Fallback Logic
+
+The `searchByTitle` method implements intelligent fallback for handling complex song titles:
+
+1. **Suffix Stripping**: Removes content after special characters `(`, `[`, `-`, `–`, `—`, `~`, `/` and their associated prefixes
+2. **Slash-Separated Titles**: For titles containing `/`, tries each part separately (e.g., `"Mayonaka no Door / Stay With Me"` → tries `"Mayonaka no Door"` then `"Stay With Me"`)
+
+Example:
+```typescript
+// "Halo Belat (2003)" → no results → "Halo Belat"
+searchByTitle("Halo Belat (2003)") → searches, falls back, retries
+
+// "Mayonaka no Door / Stay With Me" → no results → tries both parts
+searchByTitle("Mayonaka no Door / Stay With Me") → searches, falls back, tries each part
+```
 
 #### New Methods in Native API Implementation
 
@@ -35,6 +51,14 @@ The `searchByQuery` method uses the native `/api/song` endpoint to search for so
 - Includes the total count in the response via `x-total-count` header
 - Supports automatic pagination for fetching all results
 
+**`searchByTitle` Method**
+
+The `searchByTitle` method performs title-only searches with intelligent fallback:
+- Filters results to match the song title
+- Implements suffix stripping for bracketed/dashed content
+- Handles slash-separated titles by trying each part separately
+- Returns comprehensive results for matching algorithms
+
 **`getAllSongsByArtist` Method**
 
 The `getAllSongsByArtist` method provides a convenient way to retrieve all songs by a specific artist:
@@ -42,20 +66,6 @@ The `getAllSongsByArtist` method provides a convenient way to retrieve all songs
 - Automatically iterates through all paginated results
 - Returns an array of all songs by the artist
 - Essential for comprehensive matching when searching for live tracks or rare recordings
-
-**`getArtistByName` Method**
-
-The `getArtistByName` method searches for artists by name using the native API:
-- Returns a list of artists matching the query
-- Provides artist IDs needed for filtered searches
-- Supports pagination for common artist names
-
-**`searchByTitle` Method**
-
-The `searchByTitle` method performs title-only searches:
-- Filters results to match the song title
-- Useful for narrowing down candidates when artist information is uncertain
-- Works with the pagination system for complete result sets
 
 **`login` Method**
 
@@ -389,60 +399,52 @@ const legacyResults = await client.searchByQuery('rock songs', {
 
 ### Integration with Matching Algorithms
 
-The search functionality is designed to work seamlessly with the track matching algorithms (F2.1-F2.3). The orchestrator now uses comprehensive search via the native API by default:
+The search functionality is designed to work seamlessly with the track matching algorithms (F2.1-F2.3). The orchestrator now uses title-based search with intelligent fallback:
 
 ```typescript
-// Example: Using comprehensive search for fuzzy matching
+// Example: Using title search with fallback for matching
 async function findBestMatch(spotifyTrack: SpotifyTrack): Promise<NavidromeSong | null> {
-  const query = `${spotifyTrack.artists[0].name} ${spotifyTrack.name}`;
-  
-  // Use native API for comprehensive results
-  const candidates = await client.searchByQuery(query);
+  // Title-based search with automatic fallback
+  const candidates = await client.searchByTitle(spotifyTrack.name);
   
   if (candidates.length === 0) return null;
   if (candidates.length === 1) return candidates[0];
   
-  // Apply fuzzy matching across ALL candidates
+  // Apply fuzzy matching across all candidates
   return applyFuzzyMatching(spotifyTrack, candidates);
 }
 
-// Example: Strict matching with comprehensive search
-async function verifyExactMatch(
-  spotifyTrack: SpotifyTrack,
-  candidates: NavidromeSong[]
-): Promise<NavidromeSong | null> {
-  // Get ALL songs by the artist for complete verification
-  const artist = await client.getArtistByName(spotifyTrack.artists[0].name);
-  const allArtistSongs = await client.getAllSongsByArtist(artist[0]?.id);
+// Example: Title with fallback handling
+async function searchWithFallback(title: string): Promise<NavidromeNativeSong[]> {
+  const songs = await client.searchByTitle(title);
   
-  // Strict matching across complete result set
-  return strictMatch(spotifyTrack, allArtistSongs);
+  // The searchByTitle method handles:
+  // 1. Suffix stripping: "(Live)" → ""
+  // 2. Slash separation: "A / B" → tries "A", then "B"
+  
+  return songs;
 }
 ```
 
-#### useNativeApi Option in Matching Configuration
+**Title Search Fallback Examples:**
 
-The matching configuration now supports the `useNativeApi` option:
+| Original Title | Stripped Title | Fallback Action |
+|----------------|----------------|-----------------|
+| `"Halo Belat (2003)"` | `"Halo Belat"` | Retries with stripped title |
+| `"Smooth Criminal - Rock Cover"` | `"Smooth Criminal"` | Retries with stripped title |
+| `"Mayonaka no Door / Stay With Me"` | `"Mayonaka no Door"` | Tries both parts separately |
 
-```typescript
-const matchingConfig = {
-  useNativeApi: true,        // Use native API (default: true)
-  strictMatching: {
-    enabled: true,
-    useNativeApi: true,      // Override for strict matching
-  },
-  fuzzyMatching: {
-    enabled: true,
-    useNativeApi: true,      // Override for fuzzy matching
-  },
-};
-```
+When `searchByTitle` is called with a title containing `/`, it:
+1. Strips the suffix first and searches
+2. If no results, tries each part of the slash-separated title
+3. Returns the first successful result set
 
-When `useNativeApi` is true, the matching algorithms receive the complete result set, enabling:
+**Benefits:**
 - Exact matches across all songs (not just top 20)
 - Comprehensive live track identification
 - Rare recording discovery
 - Complete album coverage verification
+- Handles complex song titles with variations
 
 ## API Reference
 
@@ -564,6 +566,18 @@ async searchByTitle(title: string, limit?: number): Promise<NavidromeNativeSong[
 
 **Returns:** Promise resolving to array of `NavidromeNativeSong` objects
 
+**Fallback Logic:**
+1. Searches with the original title
+2. If no results, strips suffixes (content after `(`, `[`, `-`, `–`, `—`, `~`, `/`) and retries
+3. If still no results and title contains `/`, tries each part separately:
+   - `"Mayonika no Door / Stay With Me"` → tries `"Mayonika no Door"` then `"Stay With Me"`
+
+**Example:**
+```typescript
+const songs = await client.searchByTitle("Mayonaka no Door / Stay With Me");
+// If no exact match, tries "Mayonaka no Door", then "Stay With Me"
+```
+
 ### Method: login
 
 ```typescript
@@ -627,14 +641,34 @@ interface NavidromeNativeSong {
   album: string;
   albumId: string;
   duration: number;
+  year?: number;
+  date?: string;
+  path?: string;
   trackNumber?: number;
   discNumber?: number;
-  year?: number;
+  size?: number;
+  suffix?: string;
+  bitRate?: number;
+  sampleRate?: number;
+  bitDepth?: number;
+  channels?: number;
   genre?: string;
-  coverArt?: string;
-  playCount?: number;
-  createdAt: string;
-  updatedAt: string;
+  genres?: Array<{ id: string; name: string }>;
+  orderTitle?: string;
+  orderAlbumName?: string;
+  orderArtistName?: string;
+  compilation?: boolean;
+  lyrics?: string;
+  isrc?: string[];
+  tags?: {
+    isrc?: string[];
+    genre?: string[];
+    copyright?: string[];
+    disctotal?: string[];
+    tracktotal?: string[];
+  };
+  createdAt?: string;
+  updatedAt?: string;
 }
 ```
 
@@ -648,12 +682,26 @@ Represents song data returned from the native Navidrome API (`/api/song` endpoin
 - `album` (string) - Album name
 - `albumId` (string) - Unique identifier for the album
 - `duration` (number) - Duration in seconds
+- `year` (number) - Release year
+- `date` (string) - Release date string
+- `path` (string) - File path in the library
 - `trackNumber` (number) - Track number on album
 - `discNumber` (number) - Disc number for multi-disc albums
-- `year` (number) - Release year
-- `genre` (string) - Music genre
-- `coverArt` (string) - URL to album artwork
-- `playCount` (number) - Number of times played
+- `size` (number) - File size in bytes
+- `suffix` (string) - File extension (e.g., "mp3", "flac")
+- `bitRate` (number) - Bit rate in kbps
+- `sampleRate` (number) - Sample rate in Hz
+- `bitDepth` (number) - Bit depth for lossless audio
+- `channels` (number) - Number of audio channels
+- `genre` (string) - Primary genre
+- `genres` (Array) - Array of genre objects with id and name
+- `orderTitle` (string) - Normalized title for sorting
+- `orderAlbumName` (string) - Normalized album name for sorting
+- `orderArtistName` (string) - Normalized artist name for sorting
+- `compilation` (boolean) - Whether it's a compilation album
+- `lyrics` (string) - Song lyrics
+- `isrc` (string[]) - ISRC codes (may be array or in tags)
+- `tags` (object) - Additional metadata including isrc, genre, copyright
 - `createdAt` (string) - Creation timestamp
 - `updatedAt` (string) - Last update timestamp
 
@@ -700,8 +748,8 @@ This feature depends on **F1.4 (Navidrome API Client)** for:
 
 The Search Functionality is in turn a dependency for:
 - **F2.1 Track Matching - ISRC** - Uses search to find songs by ISRC
-- **F2.2 Track Matching - Fuzzy** - Uses search to find candidate matches
-- **F2.3 Track Matching - Strict** - Uses search to verify exact matches
+- **F2.2 Track Matching - Fuzzy** - Uses title search to find candidate matches
+- **F2.3 Track Matching - Strict** - Uses title search with fallback to verify exact matches
 
 ### External Dependencies
 
@@ -800,6 +848,34 @@ Testing confirmed:
 3. **New Features**
    - Automatic pagination handling in all native API methods
    - `x-total-count` header integration for progress tracking
+
+### Update Notes
+
+### January 6, 2026 - Title Search Fallback & Matching Refactor
+
+**Title Search Fallback Logic:**
+
+1. **Suffix Stripping Pattern**
+   - Added `stripTitleSuffix` function in `lib/matching/fuzzy.ts`
+   - Removes content after: `(`, `[`, `-`, `–`, `—`, `~`, `/`
+   - Example: `"Halo Belat (2003)"` → `"Halo Belat"`
+
+2. **Slash-Separated Title Handling**
+   - For titles like `"Mayonaka no Door / Stay With Me"`
+   - First tries stripped version `"Mayonaka no Door"`
+   - If no results, tries each part separately
+   - Returns first successful match
+
+3. **Matching Logic Refactor**
+   - Changed from artist-based to title-based search
+   - `matchTrack` now uses `searchByTitle(spotifyTrack.name)` instead of `getArtistByName`
+   - `matchByStrict` updated to use title search with fallback
+   - Improves matching accuracy for songs with varying artist metadata
+
+4. **API Response Format Support**
+   - Updated `NavidromeNativeSong` type to match actual API response
+   - Added support for `tags.isrc`, `genres`, `order*` fields
+   - Handles both array and object response formats from `/api/song`
 
 ### Token-Based Authentication Fix
 
@@ -942,3 +1018,41 @@ Testing confirmed:
 - Single login per session instead of login per API request
 - Faster API response times
 - Prevents rate limiting from excessive authentication attempts
+
+### January 6, 2026 - Title Search Fallback & Matching Refactor
+
+**Title Search Fallback Logic:**
+
+1. **Suffix Stripping Pattern**
+   - Added `stripTitleSuffix` function in `lib/matching/fuzzy.ts`
+   - Pattern: `/[\(\[].*[\)\]].*$|[-–—~/].*$/`
+   - Removes content after: `(`, `[`, `-`, `–`, `—`, `~`, `/`
+   - Example: `"Halo Belat (2003)"` → `"Halo Belat"`
+
+2. **Slash-Separated Title Handling**
+   - For titles like `"Mayonaka no Door / Stay With Me"`
+   - First tries stripped version `"Mayonaka no Door"`
+   - If no results, tries each part separately
+   - Returns first successful match
+
+3. **Matching Logic Refactor**
+   - Changed from artist-based to title-based search
+   - `matchTrack` now uses `searchByTitle(spotifyTrack.name)` instead of `getArtistByName`
+   - `matchByStrict` updated to use title search with fallback
+   - Improves matching accuracy for songs with varying artist metadata
+
+4. **API Response Format Support**
+   - Updated `NavidromeNativeSong` type to match actual API response
+   - Added support for `tags.isrc`, `genres`, `order*` fields
+   - Handles both array and object response formats from `/api/song`
+
+**Files Modified:**
+- `lib/navidrome/client.ts` - Updated `searchByTitle` with fallback logic
+- `lib/matching/fuzzy.ts` - Added `stripTitleSuffix` function and `TITLE_SUFFIX_PATTERN`
+- `lib/matching/orchestrator.ts` - Changed to use title-based search
+- `lib/matching/strict-matcher.ts` - Changed to use title search with fallback
+- `types/navidrome.ts` - Updated `NavidromeNativeSong` interface
+
+**Migration:**
+- No migration needed - this is backward compatible
+- Existing matching will automatically benefit from improved search
