@@ -175,100 +175,169 @@ border-4 border-green-500 border-t-transparent
 
 ### 2.1 Layout Overview
 
-**Vertical Split Layout:**
-- **Top (40%):** Export Progress Panel - Shows current export progress, statistics, and current track
-- **Bottom (60%):** Table View - Remains visible during export with modified Status column
+**Screen Split:** 50% top / 50% bottom (horizontal split)
+
+**Before/After Export Layout:**
+- **Top Half:** Two-column layout
+  - **Left Column (50%):** Selected Playlists table + Statistics
+  - **Right Column (50%):** Unmatched Songs detail panel
+- **Bottom Half:** Main playlist table (scrollable)
+
+**During Export Layout:**
+- **Bottom table disappears**
+- **Top section reorganizes vertically:**
+  1. Selected Playlists table (from left column)
+  2. Statistics (from left column bottom)
+  3. Unmatched Songs detail panel (from right column)
+
+### 2.2 Before/After Export Layout
 
 ```
-+------------------------------------------------------+
-|  EXPORT PROGRESS PANEL (40% height)                  |
-|  +--------------------------------------------------+ |
-|  | Playlist: Playlist Name                          | |
-|  | Phase: Matching | 45 of 100 tracks              | |
-|  | [==================== 45% ================]     | |
-|  | Current: "Song Title" by "Artist Name"          | |
-|  | Matched: 40  Unmatched: 5  Exported: 35         | |
-|  |                        [Cancel Export]          | |
-|  +--------------------------------------------------+ |
-+------------------------------------------------------+
-|  TABLE VIEW (60% height)                             |
-|  +--------------------------------------------------+ |
-|  | Select | Cover | Name    | Tracks | Owner | Stat| |
-|  +--------------------------------------------------+ |
-|  | [  ]   | [Img] | Liked...| 150    | You   | === | | <- Highlighted (exporting)
-|  | [x]    | [Img] | Playlist| 42     | User  | Out | |
-|  | [  ]   | [Img] | Another | 89     | Other | ---- | |
-|  +--------------------------------------------------+ |
-+------------------------------------------------------+
++----------------------------------------------------------------------+
+|  TOP HALF (50% height)                                               |
+|  +------------------------------------+-----------------------------+ |
+|  |  LEFT SECTION (50% width)          |  RIGHT SECTION (50% width) | |
+|  |  +------------------------------+  |                             | |
+|  |  | Selected Playlists           |  |  Unmatched Songs Details   | |
+|  |  | +--------------------------+  |  |  (shown when playlist      | |
+|  |  | | Playlist    | Status | > |  |   is selected from left)   | |
+|  |  | +--------------------------+  |  |                             | |
+|  |  | | Liked Songs  | Exported |  |  |  +-----------------------+ | |
+|  |  | | Playlist A   | Pending  |  |  |  | Title | Album | Artist| | |
+|  |  | | Playlist B   | ----     |  |  |  +-----------------------+ | |
+|  |  | +--------------------------+  |  | | Song A | Album | Artist | | |
+|  |  | ^ Click to show details    |  |  | | Song B | Album | Artist | | |
+|  |  +------------------------------+  |  | +-----------------------+ | |
+|  |                                    |                             | |
+|  |  +------------------------------+  |                             | |
+|  |  | Statistics                   |  |                             | |
+|  |  | +-------+-------+---------+  |  |                             | |
+|  |  | | Match |Unmatch|Export   |  |  |                             | |
+|  |  | |  45   |   5   |   40    |  |  |                             | |
+|  |  | +-------+-------+---------+  |  |                             | |
+|  |  +------------------------------+  |                             | |
+|  +------------------------------------+-----------------------------+ |
++----------------------------------------------------------------------+
+|  BOTTOM HALF (50% height) - Main Playlist Table                      |
+|  +----------------------------------------------------------------+ |
+|  | Select | Cover | Name          | Tracks | Owner   | Status      | |
+|  +----------------------------------------------------------------+ |
+|  |   [x]  |  [🖼] | Liked Songs   |  150   | You     | [Exported]  | |
+|  |   [ ]  |  [🖼] | Playlist A    |   42   | User    | [Pending]   | |
+|  |   [ ]  |  [🖼] | Playlist B    |   89   | Other   | [----]      | |
+|  +----------------------------------------------------------------+ |
++----------------------------------------------------------------------+
 ```
 
-### 2.2 Progress Panel Components
+### 2.3 During Export Layout
 
-#### Progress Panel Features
-- **Playlist Name:** Currently exporting playlist
-- **Phase Indicator:** Matching tracks → Exporting to Navidrome
-- **Progress Bar:** Overall progress with percentage
-- **Current Track:** Track name, artist, and progress (e.g., "45/100")
-- **Statistics Cards:**
-  - Matched (green) - Successfully matched tracks
-  - Unmatched (yellow) - No match found
-  - Exported (blue) - Successfully exported to Navidrome
-- **Cancel Export Button:** Abort the entire export process
-- **Time Estimates:** Elapsed/remaining time (optional)
-
-#### Visual Styling
-- Uses existing `ProgressTracker` component styling
-- Card container: `rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900`
-- Statistics cards: Colored backgrounds matching status badges
-
-### 2.3 Table Behavior During Export
-
-#### Status Column Transformation
-The Status column dynamically changes based on export state:
-
-| State | Column Content |
-|-------|----------------|
-| **Idle** | Status badge: `Exported` / `Out of Sync` / `Not Exported` |
-| **Exporting** | Progress bar showing export progress (per-playlist) |
-| **Completed** | Updated status badge |
-
-#### Status Badge Styles (Idle State)
-
-| Status | Badge Style |
-|--------|-------------|
-| None | `bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400` |
-| Exported | `bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400` |
-| Out of Sync | `bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400` |
-
-#### Progress Bar Styles (Exporting State)
-
-```tsx
-{/* Progress bar in Status column during export */}
-<div className="w-full bg-zinc-100 dark:bg-zinc-800 rounded-full h-2 overflow-hidden">
-  <div 
-    className="bg-blue-500 h-full transition-all duration-300"
-    style={{ width: `${percent}%` }}
-  />
-</div>
+```
++----------------------------------------------------------------------+
+|  TOP SECTION (100% height - bottom table hidden)                     |
+|  +----------------------------------------------------------------+ |
+|  | 1. Selected Playlists (Top-Left section)                       | |
+|  |  +----------------------------------------------------------+  | |
+|  |  | Playlist Name    | Status     | Progress | Match/Unmatch | | |
+|  |  +----------------------------------------------------------+  | |
+|  |  | Liked Songs      | Exported   | [=====]  | 45 / 5        | | |
+|  |  | Playlist A       | Exporting  | [====-]  | 30 / 12       | | |
+|  |  | Playlist B       | Pending    | [-----]  | - / -         | | |
+|  |  +----------------------------------------------------------+  | |
+|  |                                                                | |
+|  |  2. Statistics (Bottom-Left section)                           | |
+|  |  +----------------------------------------------------------+  | |
+|  |  | Matched    | Unmatched   | Exported   | Failed           | | |
+|  |  |    45      |     5       |     40     |       0          | | |
+|  |  +----------------------------------------------------------+  | |
+|  |                                                                | |
+|  |  3. Unmatched Songs (Right section, below statistics)          | |
+|  |  +----------------------------------------------------------+  | |
+|  |  | Title             | Album          | Artist      | Duration | | |
+|  |  +----------------------------------------------------------+  | |
+|  |  | Song Title A      | Album Name     | Artist Name | 3:45     | | |
+|  |  | Song Title B      | Album Name     | Artist Name | 4:20     | | |
+|  |  +----------------------------------------------------------+  | |
+|  |                                                                | |
+|  |                           [Cancel Export]                      | |
+|  +----------------------------------------------------------------+ |
++----------------------------------------------------------------------+
 ```
 
-#### Row Highlighting
-- **Currently exporting playlist row** gets highlighted
-- **Highlight style:** `border-l-4 border-l-blue-500 bg-blue-50 dark:bg-blue-900/20`
-- Non-exporting rows remain with zebra striping
-- Table selection is **disabled** during export
+### 2.4 Selected Playlists Table Features
 
-### 2.4 Export Flow Sequence
+The Selected Playlists table in the left section supports:
 
-1. User clicks "Export Selected"
-2. Progress Panel appears at top (40% height)
-3. Table remains visible below (60% height)
-4. First selected playlist row is highlighted
-5. Status column shows progress bar for exporting playlist
-6. Progress updates in real-time as tracks are processed
-7. On completion, status changes to "Exported"
-8. Move to next selected playlist
-9. When all complete, show Results Report
+- **Expandable Rows:** Click a row to show detailed breakdown
+- **Detail View shows:**
+  - Matched songs list
+  - Unmatched songs list (clickable to show in right panel)
+  - Export progress per playlist
+- **Status column:** Shows `Exported` / `Exporting` / `Pending`
+- **Progress bar:** Visual progress indicator during export
+- **Match counts:** Shows "45 / 5" format (matched / unmatched)
+
+### 2.5 Unmatched Songs Detail Panel
+
+**Location:** Right section (Before/During Export)
+
+**Columns:**
+| Column | Width | Content |
+|--------|-------|---------|
+| Title | 40% | Song title (truncated) |
+| Album | 25% | Album name (truncated) |
+| Artist | 25% | Artist name (truncated) |
+| Duration | 10% | Track duration (mm:ss) |
+
+**Behavior:**
+- Shows unmatched songs for selected playlist from left table
+- Empty state when no playlist selected
+- Click a song row for additional options (e.g., "Skip", "Match manually")
+
+### 2.6 Statistics Section
+
+**Location:** Bottom-left of top half
+
+**Statistics Cards:**
+| Stat | Color | Description |
+|------|-------|-------------|
+| Matched | Green | Successfully matched tracks |
+| Unmatched | Yellow | No match found in Navidrome |
+| Exported | Blue | Successfully exported to Navidrome |
+| Failed | Red | Export failures |
+
+**Layout:** 4-column grid or horizontal row depending on screen size
+
+### 2.7 During Export Behavior
+
+- **Bottom table:** Hidden (frees up space for detailed export view)
+- **Left column sections:** Stack vertically
+  1. Selected Playlists table (with progress bars)
+  2. Statistics cards
+- **Right section:** Shows unmatched songs for currently exporting playlist
+- **Cancel button:** Visible at bottom of top section
+- **Updates in real-time:** Statistics and progress bars update as export progresses
+
+### 2.8 Export Flow Sequence
+
+**Before Export:**
+1. User selects playlists in main table
+2. Selected playlists appear in Top-Left section
+3. Click playlist row to see unmatched songs in Top-Right
+4. Click "Export Selected" button
+
+**During Export:**
+1. Bottom table hides
+2. Top section reorganizes to vertical layout
+3. Currently exporting playlist highlighted
+4. Progress bars show per-playlist progress
+5. Statistics update in real-time
+6. Unmatched songs panel shows current playlist's unmatched tracks
+7. User can cancel anytime
+
+**After Export:**
+1. Layout reverts to Before/Export state
+2. Status badges update to "Exported"
+3. Results may show in a modal or separate view
 
 ### 2.5 Cancel Export Behavior
 
@@ -620,13 +689,15 @@ interface ExportMetadata {
 | Task | File | Description |
 |------|------|-------------|
 | Implement selection | `Dashboard.tsx` | Multi-select with "Select All" (filtered playlists only) |
-| Update export flow | `Dashboard.tsx` | Connect selection to export, trigger progress panel |
+| Update export flow | `Dashboard.tsx` | Connect selection to export, trigger layout changes |
 | Preserve selection state | `Dashboard.tsx` | Session persistence |
 | Implement export tracking | `lib/navidrome/client.ts` | Add methods to read/update comment metadata |
 | Implement sync detection | `Dashboard.tsx` | Match Navidrome playlists with Spotify playlists |
-| Create Export Progress Panel | `components/Dashboard/ExportProgressPanel.tsx` | Top section showing export progress |
-| Update table row | `components/Dashboard/TableRow.tsx` | Add progress bar and highlighting for export |
-| Update status column | `components/Dashboard/PlaylistTable.tsx` | Transform status to progress during export |
+| Create Selected Playlists Panel | `components/Dashboard/SelectedPlaylistsPanel.tsx` | Left-top section with selected playlists |
+| Create Statistics Panel | `components/Dashboard/StatisticsPanel.tsx` | Left-bottom section with match stats |
+| Create Unmatched Songs Panel | `components/Dashboard/UnmatchedSongsPanel.tsx` | Right section showing unmatched details |
+| Update main table | `components/Dashboard/PlaylistTable.tsx` | Main table with expandable rows |
+| Create Export Layout Manager | `components/Dashboard/ExportLayoutManager.tsx` | Manages layout transitions (before/during/after) |
 
 ### Phase 4: Visual Polish
 
@@ -648,11 +719,14 @@ interface ExportMetadata {
 |------|---------|
 | `components/Dashboard/PlaylistTable.tsx` | Main table component |
 | `components/Dashboard/TableHeader.tsx` | Sortable header cells |
-| `components/Dashboard/TableRow.tsx` | Playlist row component with export progress |
+| `components/Dashboard/TableRow.tsx` | Playlist row component with expandable details |
 | `components/Dashboard/LovedSongsRow.tsx` | Fixed second row for Liked Songs |
 | `components/Dashboard/TableFilters.tsx` | Filter controls |
 | `components/Dashboard/TableSearch.tsx` | Search input component |
-| `components/Dashboard/ExportProgressPanel.tsx` | Progress panel for during export |
+| `components/Dashboard/SelectedPlaylistsPanel.tsx` | Left-top section with selected playlists table |
+| `components/Dashboard/StatisticsPanel.tsx` | Left-bottom section with match/unmatch/export stats |
+| `components/Dashboard/UnmatchedSongsPanel.tsx` | Right section showing unmatched song details |
+| `components/Dashboard/ExportLayoutManager.tsx` | Manages layout transitions (before/during/after) |
 | `hooks/usePlaylistTable.ts` | Custom hook for table state |
 | `hooks/useExportProgress.ts` | Custom hook for export progress tracking |
 | `types/playlist-table.ts` | Table-specific types |
@@ -793,6 +867,7 @@ The table inherits the login page visual language but adapts for data display:
 
 ### Manual Testing Checklist
 
+**Table & Basic Features:**
 - [ ] Table renders with all playlists loaded at once
 - [ ] Sticky header works on scroll
 - [ ] Loved Songs row appears as second row (after header)
@@ -803,20 +878,35 @@ The table inherits the login page visual language but adapts for data display:
 - [ ] "Select All" selects only filtered/visible playlists
 - [ ] Export button is disabled when no selection
 - [ ] Status column is visible but not filterable
+
+**Export Tracking & Sync:**
 - [ ] Export creates Navidrome playlist with metadata in comment
 - [ ] Dashboard loads and matches Navidrome playlists with Spotify playlists
 - [ ] Export status shows correctly (none/exported/out-of-sync)
 - [ ] Out of sync badge appears when snapshot IDs differ
 - [ ] Re-export updates existing Navidrome playlist
 - [ ] Liked Songs tracking works correctly
-- [ ] Progress Panel appears above table on export
-- [ ] Vertical split layout (40% progress, 60% table) works
-- [ ] Status column transforms to progress bar during export
-- [ ] Currently exporting row is highlighted
-- [ ] Progress bar updates in real-time
-- [ ] Statistics cards show correct counts
-- [ ] Current track info displays during matching
+
+**Before/After Export Layout:**
+- [ ] Top half shows two-column layout (left: Selected Playlists + Statistics, right: Unmatched Songs)
+- [ ] Selected Playlists table appears in left section
+- [ ] Statistics cards visible in bottom-left
+- [ ] Unmatched Songs panel appears in right section
+- [ ] Clicking playlist in left shows its unmatched songs in right
+- [ ] Bottom half shows main playlist table
+
+**During Export Layout:**
+- [ ] Bottom table disappears when export starts
+- [ ] Top section reorganizes to vertical layout
+- [ ] Selected Playlists table shows at top (with progress bars)
+- [ ] Statistics cards show below Selected Playlists
+- [ ] Unmatched Songs panel shows below Statistics
+- [ ] Progress bars update in real-time for each playlist
+- [ ] Currently exporting playlist is highlighted
 - [ ] Cancel export button works and returns to table
+- [ ] Layout reverts after export completes
+
+**UI & Styling:**
 - [ ] Results view shows after export completes
 - [ ] Back to Dashboard returns to table
 - [ ] Dark mode renders correctly (login page style)
