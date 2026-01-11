@@ -173,39 +173,267 @@ border-4 border-green-500 border-t-transparent
 
 ## Stage 2: During Exporting (Progress View)
 
-### 2.1 Progress Display Components
+### 2.1 Layout Overview
 
-#### Progress Tracker (Existing)
-- Uses `ProgressTracker` component
-- Shows current phase: matching → exporting → completed
-- Real-time progress bar with percentage
-- Statistics: matched, unmatched, exported, failed
-- Current track display with name and artist
-
-#### Export Progress Features
-- Cancel export button
-- Pause/Resume capability (optional)
-- Time elapsed/remaining estimates
-
-### 2.2 Visual Layout
+**Vertical Split Layout:**
+- **Top (40%):** Export Progress Panel - Shows current export progress, statistics, and current track
+- **Bottom (60%):** Table View - Remains visible during export with modified Status column
 
 ```
 +------------------------------------------------------+
-|  [Back to Dashboard]                                 |
+|  EXPORT PROGRESS PANEL (40% height)                  |
+|  +--------------------------------------------------+ |
+|  | Playlist: Playlist Name                          | |
+|  | Phase: Matching | 45 of 100 tracks              | |
+|  | [==================== 45% ================]     | |
+|  | Current: "Song Title" by "Artist Name"          | |
+|  | Matched: 40  Unmatched: 5  Exported: 35         | |
+|  |                        [Cancel Export]          | |
+|  +--------------------------------------------------+ |
 +------------------------------------------------------+
-|  Exporting: Playlist Name                            |
-+------------------------------------------------------+
-|  [==================== 45% ================]         |
-|  Phase: Matching | Matching 45 of 100 tracks         |
-+------------------------------------------------------+
-|  Current: "Song Title" by "Artist Name"              |
-+------------------------------------------------------+
-|  Statistics:                                         |
-|  [Matched: 40] [Unmatched: 5] [Exported: 35]         |
-+------------------------------------------------------+
-|                        [Cancel Export]               |
+|  TABLE VIEW (60% height)                             |
+|  +--------------------------------------------------+ |
+|  | Select | Cover | Name    | Tracks | Owner | Stat| |
+|  +--------------------------------------------------+ |
+|  | [  ]   | [Img] | Liked...| 150    | You   | === | | <- Highlighted (exporting)
+|  | [x]    | [Img] | Playlist| 42     | User  | Out | |
+|  | [  ]   | [Img] | Another | 89     | Other | ---- | |
+|  +--------------------------------------------------+ |
 +------------------------------------------------------+
 ```
+
+### 2.2 Progress Panel Components
+
+#### Progress Panel Features
+- **Playlist Name:** Currently exporting playlist
+- **Phase Indicator:** Matching tracks → Exporting to Navidrome
+- **Progress Bar:** Overall progress with percentage
+- **Current Track:** Track name, artist, and progress (e.g., "45/100")
+- **Statistics Cards:**
+  - Matched (green) - Successfully matched tracks
+  - Unmatched (yellow) - No match found
+  - Exported (blue) - Successfully exported to Navidrome
+- **Cancel Export Button:** Abort the entire export process
+- **Time Estimates:** Elapsed/remaining time (optional)
+
+#### Visual Styling
+- Uses existing `ProgressTracker` component styling
+- Card container: `rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900`
+- Statistics cards: Colored backgrounds matching status badges
+
+### 2.3 Table Behavior During Export
+
+#### Status Column Transformation
+The Status column dynamically changes based on export state:
+
+| State | Column Content |
+|-------|----------------|
+| **Idle** | Status badge: `Exported` / `Out of Sync` / `Not Exported` |
+| **Exporting** | Progress bar showing export progress (per-playlist) |
+| **Completed** | Updated status badge |
+
+#### Status Badge Styles (Idle State)
+
+| Status | Badge Style |
+|--------|-------------|
+| None | `bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400` |
+| Exported | `bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400` |
+| Out of Sync | `bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400` |
+
+#### Progress Bar Styles (Exporting State)
+
+```tsx
+{/* Progress bar in Status column during export */}
+<div className="w-full bg-zinc-100 dark:bg-zinc-800 rounded-full h-2 overflow-hidden">
+  <div 
+    className="bg-blue-500 h-full transition-all duration-300"
+    style={{ width: `${percent}%` }}
+  />
+</div>
+```
+
+#### Row Highlighting
+- **Currently exporting playlist row** gets highlighted
+- **Highlight style:** `border-l-4 border-l-blue-500 bg-blue-50 dark:bg-blue-900/20`
+- Non-exporting rows remain with zebra striping
+- Table selection is **disabled** during export
+
+### 2.4 Export Flow Sequence
+
+1. User clicks "Export Selected"
+2. Progress Panel appears at top (40% height)
+3. Table remains visible below (60% height)
+4. First selected playlist row is highlighted
+5. Status column shows progress bar for exporting playlist
+6. Progress updates in real-time as tracks are processed
+7. On completion, status changes to "Exported"
+8. Move to next selected playlist
+9. When all complete, show Results Report
+
+### 2.5 Cancel Export Behavior
+
+- **Cancel Button:** Always visible in Progress Panel during export
+- **On Cancel:**
+  - Stop current export process
+  - Show "Export cancelled" state
+  - Allow user to return to table view
+  - Previously exported playlists retain "Exported" status
+  - In-progress playlist remains with previous status
+
+---
+
+## Export Progress Panel Component
+
+### Component Overview
+
+The `ExportProgressPanel` displays above the table during export, showing real-time progress of playlist exports.
+
+### Props Interface
+
+```typescript
+interface ExportProgressPanelProps {
+  playlistName: string;
+  phase: 'matching' | 'exporting' | 'completed';
+  progress: {
+    current: number;
+    total: number;
+    percent: number;
+  };
+  currentTrack?: {
+    name: string;
+    artist: string;
+    index?: number;
+    total?: number;
+  };
+  statistics: {
+    matched: number;
+    unmatched: number;
+    exported: number;
+    failed: number;
+  };
+  onCancel: () => void;
+  isLastPlaylist?: boolean;
+}
+```
+
+### Visual Layout
+
+```tsx
+<div className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6">
+  {/* Header */}
+  <div className="flex items-center justify-between mb-4">
+    <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+      Exporting: {playlistName}
+    </h2>
+    <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
+      phase === 'completed' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' :
+      phase === 'exporting' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' :
+      'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
+    }`}>
+      {phase === 'matching' ? 'Matching tracks' : phase === 'exporting' ? 'Exporting' : 'Complete'}
+    </span>
+  </div>
+
+  {/* Progress Bar */}
+  <div className="mb-4">
+    <div className="flex justify-between text-sm text-zinc-500 dark:text-zinc-400 mb-2">
+      <span>Processing...</span>
+      <span className="font-medium">{progress.percent}%</span>
+    </div>
+    <div className="h-3 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+      <div 
+        className="h-full bg-green-500 transition-all duration-300"
+        style={{ width: `${progress.percent}%` }}
+      />
+    </div>
+  </div>
+
+  {/* Current Track */}
+  {currentTrack && (
+    <div className="flex items-center gap-3 p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-lg mb-4">
+      <svg className="w-5 h-5 text-zinc-400 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z" />
+      </svg>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">
+          {currentTrack.name}
+        </p>
+        <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
+          {currentTrack.artist}
+        </p>
+      </div>
+      {currentTrack.index !== undefined && currentTrack.total !== undefined && (
+        <div className="text-xs text-zinc-400">
+          {currentTrack.index + 1}/{currentTrack.total}
+        </div>
+      )}
+    </div>
+  )}
+
+  {/* Statistics */}
+  <div className="grid grid-cols-3 gap-4 mb-4">
+    <div className="text-center p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+      <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+        {statistics.matched}
+      </p>
+      <p className="text-xs text-green-700 dark:text-green-400">Matched</p>
+    </div>
+    <div className="text-center p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
+      <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
+        {statistics.unmatched}
+      </p>
+      <p className="text-xs text-yellow-700 dark:text-yellow-400">Unmatched</p>
+    </div>
+    <div className="text-center p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+      <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+        {statistics.exported}
+      </p>
+      <p className="text-xs text-blue-700 dark:text-blue-400">Exported</p>
+    </div>
+  </div>
+
+  {/* Footer */}
+  <div className="flex items-center justify-between">
+    <p className="text-sm text-zinc-500 dark:text-zinc-400">
+      {progress.current} of {progress.total} tracks processed
+    </p>
+    <button
+      onClick={onCancel}
+      className="px-4 py-2 text-sm font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 bg-red-50 hover:bg-red-100 dark:bg-red-900/30 dark:hover:bg-red-900/50 rounded-lg transition-colors"
+    >
+      Cancel Export
+    </button>
+  </div>
+</div>
+```
+
+### Vertical Split Layout Configuration
+
+The dashboard uses a configurable vertical split during export:
+
+```tsx
+{isExporting ? (
+  <div className="flex flex-col h-screen">
+    {/* Progress Panel - 40% height */}
+    <div className="h-[40%] p-6 overflow-y-auto">
+      <ExportProgressPanel {...progressProps} />
+    </div>
+    
+    {/* Table - 60% height */}
+    <div className="flex-1 overflow-hidden">
+      <PlaylistTable ... />
+    </div>
+  </div>
+) : (
+  <PlaylistTable ... />
+)}
+```
+
+**Notes:**
+- Height percentages are configurable via CSS or props
+- Both panels remain scrollable independently
+- Table header remains sticky during export
+- Table selection is disabled during export
 
 ---
 
@@ -392,10 +620,13 @@ interface ExportMetadata {
 | Task | File | Description |
 |------|------|-------------|
 | Implement selection | `Dashboard.tsx` | Multi-select with "Select All" (filtered playlists only) |
-| Update export flow | `Dashboard.tsx` | Connect selection to export |
+| Update export flow | `Dashboard.tsx` | Connect selection to export, trigger progress panel |
 | Preserve selection state | `Dashboard.tsx` | Session persistence |
 | Implement export tracking | `lib/navidrome/client.ts` | Add methods to read/update comment metadata |
 | Implement sync detection | `Dashboard.tsx` | Match Navidrome playlists with Spotify playlists |
+| Create Export Progress Panel | `components/Dashboard/ExportProgressPanel.tsx` | Top section showing export progress |
+| Update table row | `components/Dashboard/TableRow.tsx` | Add progress bar and highlighting for export |
+| Update status column | `components/Dashboard/PlaylistTable.tsx` | Transform status to progress during export |
 
 ### Phase 4: Visual Polish
 
@@ -417,11 +648,13 @@ interface ExportMetadata {
 |------|---------|
 | `components/Dashboard/PlaylistTable.tsx` | Main table component |
 | `components/Dashboard/TableHeader.tsx` | Sortable header cells |
-| `components/Dashboard/TableRow.tsx` | Playlist row component |
+| `components/Dashboard/TableRow.tsx` | Playlist row component with export progress |
 | `components/Dashboard/LovedSongsRow.tsx` | Fixed second row for Liked Songs |
 | `components/Dashboard/TableFilters.tsx` | Filter controls |
 | `components/Dashboard/TableSearch.tsx` | Search input component |
+| `components/Dashboard/ExportProgressPanel.tsx` | Progress panel for during export |
 | `hooks/usePlaylistTable.ts` | Custom hook for table state |
+| `hooks/useExportProgress.ts` | Custom hook for export progress tracking |
 | `types/playlist-table.ts` | Table-specific types |
 | `types/export.ts` | Export metadata types |
 
@@ -576,8 +809,15 @@ The table inherits the login page visual language but adapts for data display:
 - [ ] Out of sync badge appears when snapshot IDs differ
 - [ ] Re-export updates existing Navidrome playlist
 - [ ] Liked Songs tracking works correctly
-- [ ] Progress view shows during export
-- [ ] Results view shows after export
+- [ ] Progress Panel appears above table on export
+- [ ] Vertical split layout (40% progress, 60% table) works
+- [ ] Status column transforms to progress bar during export
+- [ ] Currently exporting row is highlighted
+- [ ] Progress bar updates in real-time
+- [ ] Statistics cards show correct counts
+- [ ] Current track info displays during matching
+- [ ] Cancel export button works and returns to table
+- [ ] Results view shows after export completes
 - [ ] Back to Dashboard returns to table
 - [ ] Dark mode renders correctly (login page style)
 - [ ] Empty state shows when no playlists
