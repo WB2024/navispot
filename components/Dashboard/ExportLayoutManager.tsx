@@ -2,6 +2,7 @@ import React, { ReactNode } from 'react';
 
 export interface ExportLayoutManagerProps {
   isExporting: boolean;
+  progressBar?: ReactNode;
   selectedPlaylistsSection: ReactNode;
   statisticsSection: ReactNode;
   unmatchedSongsSection: ReactNode;
@@ -12,6 +13,7 @@ export interface ExportLayoutManagerProps {
 
 export function ExportLayoutManager({
   isExporting,
+  progressBar,
   selectedPlaylistsSection,
   statisticsSection,
   unmatchedSongsSection,
@@ -28,6 +30,8 @@ export function ExportLayoutManager({
       )}
 
       <div className="flex flex-col h-[calc(100vh-100px)]">
+        {progressBar}
+
         <div
           className={`transition-all duration-300 ease-in-out ${
             isExporting ? 'flex-1' : 'h-[50%]'

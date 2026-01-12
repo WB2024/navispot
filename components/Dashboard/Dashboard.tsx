@@ -666,33 +666,19 @@ export function Dashboard() {
     />
   );
 
+  const progressBar = isExporting && progressState && (
+    <div className="w-full bg-zinc-200 dark:bg-zinc-800 h-2 rounded-full overflow-hidden mb-4">
+      <div
+        className="bg-blue-500 h-full transition-all duration-300 ease-out"
+        style={{ width: `${progressState.progress.percent}%` }}
+      />
+    </div>
+  );
+
   if (!spotify.isAuthenticated) {
     return (
       <div className="flex min-h-[400px] items-center justify-center">
         <p className="text-gray-500">Please connect your Spotify account to view playlists.</p>
-      </div>
-    );
-  }
-
-  if (progressState && progressState.phase !== 'completed') {
-    return (
-      <div className="py-8">
-        <div className="mb-6">
-          <button
-            onClick={handleCancelExport}
-            className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            Back to Dashboard
-          </button>
-        </div>
-        <ProgressTracker
-          state={progressState}
-          onCancel={handleCancelExport}
-          onComplete={handleCompleteExport}
-        />
       </div>
     );
   }
@@ -732,6 +718,7 @@ export function Dashboard() {
 
       <ExportLayoutManager
         isExporting={isExporting}
+        progressBar={progressBar}
         selectedPlaylistsSection={selectedPlaylistsSection}
         statisticsSection={statisticsSection}
         unmatchedSongsSection={unmatchedSongsSection}
