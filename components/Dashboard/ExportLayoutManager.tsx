@@ -60,7 +60,7 @@ export function ExportLayoutManager({
         </div>
 
         {!isExporting && (
-          <div className="h-[50%] overflow-hidden pt-4">
+          <div className="h-[50%] border-t border-zinc-200 dark:border-zinc-800 overflow-hidden pt-4">
             {mainTableSection}
           </div>
         )}

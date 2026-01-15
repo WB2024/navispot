@@ -286,8 +286,8 @@ export function PlaylistTable({
   const allVisibleSelected = visibleCount > 0 && selectedCount === visibleCount;
 
   return (
-    <div className="w-full">
-      <div className="relative mb-4">
+    <div className="w-full flex flex-col h-full overflow-hidden">
+      <div className="relative mb-4 flex-shrink-0">
         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
           <svg className="h-5 w-5 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -313,8 +313,8 @@ export function PlaylistTable({
         )}
       </div>
 
-      <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden">
-        <div className="overflow-auto max-h-[calc(100vh-250px)]">
+      <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden flex-1">
+        <div className="overflow-auto h-full">
           <table className="w-full divide-y divide-zinc-200 dark:divide-zinc-800">
             <thead className="sticky top-0 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-sm z-10">
               <tr className="border-b border-zinc-200 dark:border-zinc-800">
@@ -417,7 +417,7 @@ export function PlaylistTable({
         </div>
       </div>
 
-      <div className="mt-2 text-sm text-zinc-500 dark:text-zinc-400 text-right">
+      <div className="mt-2 text-sm text-zinc-500 dark:text-zinc-400 text-right flex-shrink-0">
         Showing {filteredItems.length} of {allItems.length} playlists
         {selectedIds.size > 0 && !isExporting && (
           <span className="ml-2 text-green-600 dark:text-green-400 font-medium">
