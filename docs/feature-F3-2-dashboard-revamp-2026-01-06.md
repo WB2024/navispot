@@ -18,13 +18,15 @@ Revamp the dashboard UI from a grid-based card layout to a table-based layout wi
 
 ## UI Flow Stages
 
-The dashboard export workflow is divided into three distinct stages:
+The dashboard export workflow is divided into three stages with a consistent layout:
 
 | Stage | Description |
 |-------|-------------|
 | **Before Exporting** | Browse, filter, search, and select playlists in a data table |
-| **During Exporting** | Track export progress with real-time status updates |
+| **During Exporting** | Track export progress with real-time status updates - layout remains the same |
 | **After Exporting** | View export results, statistics, and options to export again or return to dashboard |
+
+**Note:** The dashboard layout (50% top two-column section + 50% bottom table) remains consistent across all three stages. The only differences between stages are dynamic UI elements (progress bars, status badges, export button state).
 
 ---
 
@@ -270,20 +272,18 @@ border-4 border-green-500 border-t-transparent
 
 ### 2.1 Layout Overview ✅ Completed
 
-**Screen Split:** 50% top / 50% bottom (horizontal split)
+**Screen Split:** 50% top / 50% bottom (horizontal split) - Consistent across all stages
 
-**Before/After Export Layout:**
-- **Top Half:** Two-column layout
+**Unified Layout (All Stages):**
+- **Top Half (50%):** Two-column layout
   - **Left Column (50%):** Selected Playlists table + Statistics
   - **Right Column (50%):** Unmatched Songs detail panel
-- **Bottom Half:** Main playlist table (scrollable)
+- **Bottom Half (50%):** Main playlist table (scrollable)
 
-**During Export Layout:**
-- **Bottom table disappears**
-- **Top section reorganizes vertically:**
-  1. Selected Playlists table (from left column)
-  2. Statistics (from left column bottom)
-  3. Unmatched Songs detail panel (from right column)
+**Note:** The dashboard layout remains consistent across before, during, and after export stages. The only differences between stages are:
+- Export button text and color changes
+- Progress bars appear in Selected Playlists table during export
+- Status badges update as export progresses
 
 ### 2.2 Before/After Export Layout ✅ Completed
 
@@ -326,28 +326,48 @@ border-4 border-green-500 border-t-transparent
 
 ### 2.3 During Export Layout ✅ Updated
 
+The layout during export is identical to the before/after export layout. The only differences are dynamic UI elements:
+
 ```
 +----------------------------------------------------------------------+
-|  TOP SECTION (100% height - bottom table hidden)                     |
+|  TOP HALF (50% height)                                               |
+|  +------------------------------------+-----------------------------+ |
+|  |  LEFT SECTION (50% width)          |  RIGHT SECTION (50% width) | |
+|  |  +------------------------------+  |                             | |
+|  |  | Selected Playlists           |  |  Unmatched Songs Details   | |
+|  |  | +--------------------------+  |  |  (shown when playlist      | |
+|  |  | | Playlist    | Status | Pro|  |   is selected from left)   | |
+|  |  | +--------------------------+  |  |                             | |
+|  |  | | Liked Songs  | [==]  | ✓  |  |  |  +-----------------------+ | |
+|  |  | | Playlist A   | [==-] | ⇶  |  |  |  | Title | Album | Artist| | |
+|  |  | | Playlist B   | [---] | •  |  |  |  +-----------------------+ | |
+|  |  | +--------------------------+  |  | | Song A | Album | Artist | | |
+|  |  | ^ Click to show details    |  |  | | Song B | Album | Artist | | |
+|  |  +------------------------------+  |  | +-----------------------+ | |
+|  |                                    |                             | |
+|  |  +------------------------------+  |                             | |
+|  |  | Statistics                   |  |                             | |
+|  |  | [Total] [Matched✓] [Unmatch✗]|  |                             | |
+|  |  +------------------------------+  |                             | |
+|  +------------------------------------+-----------------------------+ |
++----------------------------------------------------------------------+
+|  BOTTOM HALF (50% height) - Main Playlist Table                      |
 |  +----------------------------------------------------------------+ |
-|  | 1. Selected Playlists (Top-Left section)                       | |
-|  |  +----------------------------------------------------------+  | |
-|  |  | Playlist Name    | Status     | Progress                 | | |
-|  |  +----------------------------------------------------------+  | |
-|  |  | Liked Songs      | Exported   | [=====]                  | | |
-|  |  | Playlist A       | Exporting  | [====-]                  | | |
-|  |  | Playlist B       | Pending    | [-----]                  | | |
-|  |  +----------------------------------------------------------+  | |
-|  |                                                                | |
-|  |  2. Unmatched Songs (Right section, below Selected Playlists)  | |
-|  |  +----------------------------------------------------------+  | |
-|  |  | Title             | Album          | Artist      | Duration | | |
-|  |  +----------------------------------------------------------+  | |
-|  |  | Song Title A      | Album Name     | Artist Name | 3:45     | | |
-|  |  | Song Title B      | Album Name     | Artist Name | 4:20     | | |
-|  |  +----------------------------------------------------------+  | |
+|  | Select | Cover | Name          | Tracks | Owner   | Status      | |
 |  +----------------------------------------------------------------+ |
+|  |   [x]  |  [🖼] | Liked Songs   |  150   | You     | [Exporting] | |
+|  |   [ ]  |  [🖼] | Playlist A    |   42   | User    | [Pending]   | |
+|  |   [ ]  |  [🖼] | Playlist B    |   89   | Other   | [----]      | |
+|  +----------------------------------------------------------------+ |
++----------------------------------------------------------------------+
 ```
+
+**Dynamic Elements During Export:**
+- Progress bars appear in Selected Playlists table (Pro column)
+- Status badges update in real-time (Exporting, Exported, etc.)
+- Statistics badges update as export progresses
+- Cancel button visible in fixed footer (red)
+- Bottom table remains visible and scrollable
 
 ### 2.4 Selected Playlists Table Features ✅ Updated
 
@@ -396,14 +416,18 @@ The separate Statistics Panel has been removed. Statistics are now displayed as 
 
 ### 2.7 During Export Behavior ✅ Updated
 
-- **Bottom table:** Hidden (frees up space for detailed export view)
-- **Left column sections:** Stack vertically
-  1. Selected Playlists table (with progress bars and stats in header)
-  2. Unmatched Songs panel
-- **Statistics:** Now shown as inline badges in Selected Playlists header
-- **Right section:** Shows unmatched songs for currently exporting playlist
-- **Cancel button:** Visible at bottom of top section
-- **Updates in real-time:** Statistics and progress bars update as export progresses
+- **Layout:** Remains consistent with before/after export (two-column top section + bottom table)
+- **Top Half:**
+  - Left column: Selected Playlists table (shows progress bars for each playlist)
+  - Right column: Unmatched Songs panel (shows unmatched tracks for selected playlist)
+  - Statistics: Displayed as inline badges in Selected Playlists header, updating in real-time
+- **Bottom Half:** Main playlist table remains visible and scrollable (interactions disabled)
+- **Progress indicators:**
+  - Progress bars appear in Selected Playlists table for each playlist
+  - Currently exporting playlist highlighted in the table
+  - Status badges update in real-time (Exporting → Exported)
+- **Cancel button:** Fixed at bottom-right of screen (red) - stops export process
+- **Real-time updates:** Statistics, progress bars, and status badges update continuously
 
 ### 2.8 Export Flow Sequence ✅ Completed
 
@@ -416,189 +440,121 @@ The separate Statistics Panel has been removed. Statistics are now displayed as 
 6. User clicks "Export" on popup to confirm
 
 **During Export:**
-1. Bottom table hides
+1. Layout remains unchanged (two-column top section + bottom table)
 2. Button changes from "Export Selected" to "Cancel Export"
 3. Button color changes from blue to red
-4. Top section reorganizes to vertical layout
+4. Progress bars appear in Selected Playlists table
 5. Currently exporting playlist highlighted
-6. Progress bars show per-playlist progress
-7. Statistics update in real-time
+6. Statistics badges update in real-time
+7. Status badges update (Exporting → Exported)
 8. Unmatched songs panel shows current playlist's unmatched tracks
-9. User can click "Cancel Export" button to abort
+9. Bottom table interactions disabled (selection, sort, filter)
+10. User can click "Cancel Export" button to abort
 
 **After Export:**
-1. Layout reverts to Before/Export state
+1. Layout remains unchanged (same as before/during export)
 2. Button reverts to "Export Selected" (blue)
 3. Status badges update to "Exported"
 4. Results may show in a modal or separate view
+5. Bottom table interactions re-enabled (selection, sort, filter)
 
 ### 2.5 Cancel Export Behavior ✅ Completed
 
 - **Cancel Button:** The fixed footer button changes to "Cancel Export" (red) during export
-- **On Cancel:**
-  - Click "Cancel Export" button to stop current export process
-  - Confirmation prompt may appear (optional): "Cancel export? Progress will be lost."
-  - If confirmed, stop current export process
-  - Show "Export cancelled" state in progress panel
-  - Previously exported playlists retain "Exported" status
-  - In-progress playlist remains with previous status
-  - Button reverts to "Export Selected" (blue)
-  - Allow user to return to table view
+ - **On Cancel:**
+   - Click "Cancel Export" button to stop current export process
+   - Confirmation prompt may appear (optional): "Cancel export? Progress will be lost."
+   - If confirmed, stop current export process
+   - Show "Export cancelled" status in Selected Playlists table
+   - Previously exported playlists retain "Exported" status
+   - In-progress playlist remains with previous status
+   - Button reverts to "Export Selected" (blue)
+   - Bottom table interactions re-enabled (selection, sort, filter)
+   - Layout remains unchanged (same as before export)
 
 ---
 
-## Export Progress Panel Component ✅ Completed
+## Export Progress Display ✅ Completed
 
-### Component Overview ✅ Completed
+### Overview ✅ Completed
 
-The `ExportProgressPanel` displays above the table during export, showing real-time progress of playlist exports.
+Export progress is displayed inline within the Selected Playlists panel during export, not as a separate component. Progress bars and status updates appear in each playlist row of the Selected Playlists table.
 
-### Props Interface ✅ Completed
+### Selected Playlists Panel with Progress ✅ Completed
+
+The Selected Playlists panel displays per-playlist progress during export:
 
 ```typescript
-interface ExportProgressPanelProps {
-  playlistName: string;
-  phase: 'matching' | 'exporting' | 'completed';
+interface SelectedPlaylistItem {
+  id: string;
+  name: string;
+  status: 'pending' | 'exporting' | 'exported' | 'failed';
   progress: {
     current: number;
     total: number;
     percent: number;
   };
-  currentTrack?: {
-    name: string;
-    artist: string;
-    index?: number;
-    total?: number;
-  };
-  statistics: {
-    matched: number;
-    unmatched: number;
-    exported: number;
-    failed: number;
-  };
-  onCancel: () => void;
-  isLastPlaylist?: boolean;
+  matchedCount: number;
+  unmatchedCount: number;
 }
+
+// Panel shows per-playlist progress bars and inline statistics
 ```
 
-### Visual Layout ✅ Completed
+### Progress Bar Display ✅ Completed
 
 ```tsx
-<div className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6">
-  {/* Header */}
-  <div className="flex items-center justify-between mb-4">
-    <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-      Exporting: {playlistName}
-    </h2>
-    <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
-      phase === 'completed' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' :
-      phase === 'exporting' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' :
-      'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
-    }`}>
-      {phase === 'matching' ? 'Matching tracks' : phase === 'exporting' ? 'Exporting' : 'Complete'}
+{/* Progress Bar in Selected Playlists Table Row */}
+<div className="w-full">
+  <div className="flex items-center justify-between mb-1">
+    <span className="text-xs text-zinc-500 dark:text-zinc-400">
+      {progress.current}/{progress.total} tracks
+    </span>
+    <span className="text-xs font-medium text-zinc-600 dark:text-zinc-300">
+      {progress.percent}%
     </span>
   </div>
-
-  {/* Progress Bar */}
-  <div className="mb-4">
-    <div className="flex justify-between text-sm text-zinc-500 dark:text-zinc-400 mb-2">
-      <span>Processing...</span>
-      <span className="font-medium">{progress.percent}%</span>
-    </div>
-    <div className="h-3 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
-      <div 
-        className="h-full bg-green-500 transition-all duration-300"
-        style={{ width: `${progress.percent}%` }}
-      />
-    </div>
-  </div>
-
-  {/* Current Track */}
-  {currentTrack && (
-    <div className="flex items-center gap-3 p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-lg mb-4">
-      <svg className="w-5 h-5 text-zinc-400 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z" />
-      </svg>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">
-          {currentTrack.name}
-        </p>
-        <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
-          {currentTrack.artist}
-        </p>
-      </div>
-      {currentTrack.index !== undefined && currentTrack.total !== undefined && (
-        <div className="text-xs text-zinc-400">
-          {currentTrack.index + 1}/{currentTrack.total}
-        </div>
-      )}
-    </div>
-  )}
-
-  {/* Statistics */}
-  <div className="grid grid-cols-3 gap-4 mb-4">
-    <div className="text-center p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
-      <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-        {statistics.matched}
-      </p>
-      <p className="text-xs text-green-700 dark:text-green-400">Matched</p>
-    </div>
-    <div className="text-center p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
-      <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
-        {statistics.unmatched}
-      </p>
-      <p className="text-xs text-yellow-700 dark:text-yellow-400">Unmatched</p>
-    </div>
-    <div className="text-center p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-      <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-        {statistics.exported}
-      </p>
-      <p className="text-xs text-blue-700 dark:text-blue-400">Exported</p>
-    </div>
-  </div>
-
-  {/* Footer */}
-  <div className="flex items-center justify-between">
-    <p className="text-sm text-zinc-500 dark:text-zinc-400">
-      {progress.current} of {progress.total} tracks processed
-    </p>
-    <button
-      onClick={onCancel}
-      className="px-4 py-2 text-sm font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 bg-red-50 hover:bg-red-100 dark:bg-red-900/30 dark:hover:bg-red-900/50 rounded-lg transition-colors"
-    >
-      Cancel Export
-    </button>
+  <div className="h-2 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+    <div 
+      className="h-full bg-green-500 transition-all duration-300"
+      style={{ width: `${progress.percent}%` }}
+    />
   </div>
 </div>
 ```
 
-### Vertical Split Layout Configuration ✅ Completed
+### Layout Configuration ✅ Completed
 
-The dashboard uses a configurable vertical split during export:
+The dashboard uses a consistent 50/50 vertical split layout across all stages (before/during/after export):
 
 ```tsx
-{isExporting ? (
-  <div className="flex flex-col h-screen">
-    {/* Progress Panel - 40% height */}
-    <div className="h-[40%] p-6 overflow-y-auto">
-      <ExportProgressPanel {...progressProps} />
-    </div>
-    
-    {/* Table - 60% height */}
-    <div className="flex-1 overflow-hidden">
-      <PlaylistTable ... />
-    </div>
+{/* Top Section - 50% height */}
+<div className="h-[50%] flex gap-4 overflow-hidden">
+  {/* Left Column - Selected Playlists (50% width) */}
+  <div className="w-1/2 flex flex-col">
+    <SelectedPlaylistsPanel {...props} />
   </div>
-) : (
-  <PlaylistTable ... />
-)}
+  
+  {/* Right Column - Unmatched Songs (50% width) */}
+  <div className="w-1/2 flex flex-col">
+    <UnmatchedSongsPanel {...props} />
+  </div>
+</div>
+
+{/* Bottom Section - 50% height */}
+<div className="h-[50%] overflow-hidden">
+  <PlaylistTable {...props} disabled={isExporting} />
+</div>
 ```
 
 **Notes:**
+- Layout remains consistent across all export stages
 - Height percentages are configurable via CSS or props
-- Both panels remain scrollable independently
-- Table header remains sticky during export
-- Table selection is disabled during export
+- All panels remain scrollable independently
+- Table header remains sticky in all stages
+- Table interactions are disabled during export (selection, sort, filter)
+- Progress bars appear in Selected Playlists panel during export
+- Statistics update in real-time during export
 
 ---
 
@@ -792,15 +748,17 @@ interface ExportMetadata {
 - [x] Bottom half shows main playlist table
 
 **During Export Layout:**
-- [x] Bottom table disappears when export starts
-- [x] Top section reorganizes to vertical layout
-- [x] Selected Playlists table shows at top (with progress bars and stats in header)
-- [x] Statistics badges show in Selected Playlists panel header
-- [x] Unmatched Songs panel shows below Selected Playlists
+- [x] Layout remains identical to before/after export (two-column top + bottom table)
+- [x] Selected Playlists table shows progress bars for each playlist
+- [x] Statistics badges show in Selected Playlists panel header and update in real-time
+- [x] Unmatched Songs panel shows unmatched tracks for selected playlist
+- [x] Bottom table remains visible and scrollable
 - [x] Progress bars update in real-time for each playlist
 - [x] Currently exporting playlist is highlighted
-- [x] Cancel export button works and returns to table
-- [x] Layout reverts after export completes
+- [x] Status badges update in real-time (Exporting → Exported)
+- [x] Cancel export button works and stops the process
+- [x] Bottom table interactions disabled during export
+- [x] Layout remains consistent after export completes
 
 **UI & Styling:**
 - [x] Results view shows after export completes
@@ -1217,8 +1175,8 @@ The Dashboard UI Revamp (Feature F3.2) has been fully implemented with the follo
 - ✅ **Out-of-sync badge** with warning icon
 - ✅ **Fixed export button** with cookie banner style
 - ✅ **Confirmation popup** before export starts
-- ✅ **Export layout manager** for before/during/after states
-- ✅ **Selected playlists panel** with progress tracking and inline statistics
+ - ✅ **Consistent layout** across all export stages (before/during/after export)
+  - ✅ **Selected playlists panel** with progress tracking and inline statistics
 - ✅ **Statistics display** as inline badges in panel header (replaces StatisticsPanel)
 - ✅ **Unmatched songs panel** showing details for selected playlist
 - ✅ **Confirmation popup** for export confirmation
