@@ -1206,6 +1206,9 @@ Updated on: January 11, 2026
 
 The Dashboard UI Revamp (Feature F3.2) has been fully implemented with the following key achievements:
 
+## Initial Implementation (January 11, 2026) ✅ Completed
+
+
 - ✅ **Table-based layout** replacing grid-based card layout
 - ✅ **Sticky header** with sorting, search, and selection
 - ✅ **Loved Songs row** as fixed second row with pink heart icon
@@ -1221,8 +1224,24 @@ The Dashboard UI Revamp (Feature F3.2) has been fully implemented with the follo
 - ✅ **Confirmation popup** for export confirmation
 - ✅ **Full dark mode support** matching login page theme
 - ✅ **Session persistence** for selection state
-
+ 
 The implementation follows all requirements from the design specification and maintains consistency with the login page design language while providing an enhanced user experience for playlist management and export operations.
+
+## UI Improvements (January 15, 2026) ✅ Completed
+
+### Enhanced Visual Presentation
+- ✅ **Scrollable table containers** for SelectedPlaylistsPanel and UnmatchedSongsPanel
+- ✅ **Sticky headers** that remain visible during scroll
+- ✅ **Consistent spacing** with proper padding between all dashboard sections
+- ✅ **Constrained column widths** (300px max) with tooltip support for truncated text
+- ✅ **Responsive layouts** maintaining dark mode compatibility
+
+### Fixed Bottom Table Height Issues
+- ✅ **Flex-based layout** replacing fixed viewport height constraints
+- ✅ **Proper height containment** ensuring table content respects 50% allocation
+- ✅ **Independent scrolling** for bottom table without affecting other sections
+- ✅ **Stable UI elements** (search bar, footer) that remain visible during scroll
+- ✅ **No viewport overflow** - all content properly contained within allocated space
 
 ---
 
