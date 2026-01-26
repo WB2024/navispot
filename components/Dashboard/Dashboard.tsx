@@ -186,6 +186,45 @@ export function Dashboard() {
     });
   }, [likedSongsCount, selectedIds]);
 
+  // Sync selectedIds with selectedPlaylistsStats for real-time population
+  useEffect(() => {
+    if (isExporting) return; // Don't update during export to preserve progress data
+
+    const selectedPlaylists: SelectedPlaylist[] = [];
+
+    if (selectedIds.has(LIKED_SONGS_ID)) {
+      selectedPlaylists.push({
+        id: LIKED_SONGS_ID,
+        name: 'Liked Songs',
+        total: likedSongsCount,
+        matched: 0,
+        unmatched: 0,
+        exported: 0,
+        failed: 0,
+        status: 'pending',
+        progress: 0,
+      });
+    }
+
+    playlists
+      .filter((p) => selectedIds.has(p.id))
+      .forEach((p) => {
+        selectedPlaylists.push({
+          id: p.id,
+          name: p.name,
+          total: p.tracks.total,
+          matched: 0,
+          unmatched: 0,
+          exported: 0,
+          failed: 0,
+          status: 'pending',
+          progress: 0,
+        });
+      });
+
+    setSelectedPlaylistsStats(selectedPlaylists);
+  }, [selectedIds, playlists, likedSongsCount, isExporting]);
+
   const filteredItems = useMemo(() => {
     let result = [...tableItems];
 

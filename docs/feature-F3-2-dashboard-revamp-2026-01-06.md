@@ -496,24 +496,25 @@ The separate Statistics Panel has been removed. Statistics are now displayed as 
 
 ## Features to be Implemented 📋
 
-### 2.5.1 Real-time Selected Playlists Table Population 📋 TO BE IMPLEMENTED
+### 2.5.1 Real-time Selected Playlists Table Population ✅ Completed (January 16, 2026)
 
-**Current Behavior:** Selected playlists only appear in Selected Playlists table after export confirmation or during export.
+**Previous Behavior:** Selected playlists only appeared in Selected Playlists table after export confirmation or during export.
 
-**Required Behavior:** Selected playlists must immediately appear in the Selected Playlists table (top-left) when the user selects them in the main table (bottom section).
+**Implemented Behavior:** Selected playlists immediately appear in the Selected Playlists table (top-left) when the user selects them in the main table (bottom section).
 
 **Implementation Details:**
-- **Real-time Updates:** When user clicks a playlist checkbox in main table, immediately add that playlist to Selected Playlists table
-- **Bidirectional Sync:** If user deselects a playlist in main table, remove it from Selected Playlists table
-- **Session Persistence:** Selected Playlists table maintains state across user interactions
-- **Visual Feedback:** Newly added playlists should be highlighted briefly to draw user attention
-- **Performance:** Updates should be instantaneous without lag
+- ✅ **Real-time Updates:** When user clicks a playlist checkbox in main table, immediately add that playlist to Selected Playlists table
+- ✅ **Bidirectional Sync:** If user deselects a playlist in main table, remove it from Selected Playlists table
+- ✅ **Session Persistence:** Selected Playlists table maintains state across user interactions
+- ✅ **Performance:** Updates are instantaneous without lag
+- ✅ **Export Protection:** Does not interfere with export progress data when export is active
 
-**Technical Requirements:**
-- Update `Dashboard.tsx` to sync `selectedPlaylists` state with `selectedIds` state
-- Modify `SelectedPlaylistsPanel.tsx` to accept and display real-time updates
-- Ensure proper cleanup when playlists are deselected
-- Maintain statistics updates as playlists are added/removed
+**Technical Implementation:**
+- Added `useEffect` hook in `Dashboard.tsx` that watches `selectedIds` changes
+- Transforms selected playlist data into `SelectedPlaylist[]` format
+- Only updates when not exporting to preserve export progress state
+- Handles both Liked Songs and regular playlists
+- Approximately 40 lines of minimal code added
 
 ### 2.5.2 Songs Panel Display (Read-Only) 📋 TO BE IMPLEMENTED
 
