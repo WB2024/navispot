@@ -1,20 +1,29 @@
-'use client';
+"use client"
 
-import { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '@/lib/auth/auth-context';
-import { NavidromeCredentials } from '@/types/navidrome';
+import { useState, useEffect, useCallback } from "react"
+import { useAuth } from "@/lib/auth/auth-context"
+import { NavidromeCredentials } from "@/types/navidrome"
 
 export function NavidromeCredentialsForm() {
-  const { navidrome, setNavidromeCredentials, clearNavidromeCredentials, isLoading } = useAuth();
+  const {
+    navidrome,
+    setNavidromeCredentials,
+    clearNavidromeCredentials,
+    isLoading,
+  } = useAuth()
   const [formData, setFormData] = useState<NavidromeCredentials>({
-    url: '',
-    username: '',
-    password: '',
-  });
-  const [showPassword, setShowPassword] = useState(false);
-  const [errors, setErrors] = useState<{ url?: string; username?: string; password?: string }>({});
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [localError, setLocalError] = useState<string | null>(null);
+    url: "",
+    username: "",
+    password: "",
+  })
+  const [showPassword, setShowPassword] = useState(false)
+  const [errors, setErrors] = useState<{
+    url?: string
+    username?: string
+    password?: string
+  }>({})
+  const [isConnecting, setIsConnecting] = useState(false)
+  const [localError, setLocalError] = useState<string | null>(null)
 
   useEffect(() => {
     if (navidrome.credentials) {
@@ -22,62 +31,62 @@ export function NavidromeCredentialsForm() {
         url: navidrome.credentials.url,
         username: navidrome.credentials.username,
         password: navidrome.credentials.password,
-      });
+      })
     }
-  }, [navidrome.credentials]);
+  }, [navidrome.credentials])
 
   const validateForm = useCallback((): boolean => {
-    const newErrors: { url?: string; username?: string; password?: string } = {};
+    const newErrors: { url?: string; username?: string; password?: string } = {}
 
     if (!formData.url.trim()) {
-      newErrors.url = 'URL is required';
+      newErrors.url = "URL is required"
     } else {
       try {
-        new URL(formData.url);
+        new URL(formData.url)
       } catch {
-        newErrors.url = 'Invalid URL format';
+        newErrors.url = "Invalid URL format"
       }
     }
 
     if (!formData.username.trim()) {
-      newErrors.username = 'Username is required';
+      newErrors.username = "Username is required"
     }
 
     if (!formData.password) {
-      newErrors.password = 'Password is required';
+      newErrors.password = "Password is required"
     }
 
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  }, [formData]);
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }, [formData])
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLocalError(null);
+    e.preventDefault()
+    setLocalError(null)
 
     if (!validateForm()) {
-      return;
+      return
     }
 
-    setIsConnecting(true);
+    setIsConnecting(true)
     try {
-      const success = await setNavidromeCredentials(formData);
+      const success = await setNavidromeCredentials(formData)
       if (!success) {
-        setLocalError(navidrome.error || 'Connection failed');
+        setLocalError(navidrome.error || "Connection failed")
       }
     } catch {
-      setLocalError('An unexpected error occurred');
+      setLocalError("An unexpected error occurred")
     } finally {
-      setIsConnecting(false);
+      setIsConnecting(false)
     }
-  };
+  }
 
   const handleDisconnect = () => {
-    setFormData({ url: '', username: '', password: '' });
-    setErrors({});
-    setLocalError(null);
-    clearNavidromeCredentials();
-  };
+    setFormData({ url: "", username: "", password: "" })
+    setErrors({})
+    setLocalError(null)
+    clearNavidromeCredentials()
+  }
 
   if (isLoading) {
     return (
@@ -89,7 +98,7 @@ export function NavidromeCredentialsForm() {
           <div className="h-10 w-full animate-pulse rounded-md bg-zinc-200 dark:bg-zinc-800" />
         </div>
       </div>
-    );
+    )
   }
 
   return (
@@ -140,13 +149,17 @@ export function NavidromeCredentialsForm() {
             id="navidrome-url"
             type="url"
             value={formData.url}
-            onChange={(e) => setFormData((prev) => ({ ...prev, url: e.target.value }))}
+            onChange={(e) =>
+              setFormData((prev) => ({ ...prev, url: e.target.value }))
+            }
             placeholder="https://your-navidrome-server.com"
             disabled={navidrome.isConnected || isConnecting}
             className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm placeholder:text-zinc-400 focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-green-500 dark:focus:ring-green-500"
           />
           {errors.url && (
-            <p className="text-sm text-red-600 dark:text-red-400">{errors.url}</p>
+            <p className="text-sm text-red-600 dark:text-red-400">
+              {errors.url}
+            </p>
           )}
         </div>
 
@@ -161,13 +174,17 @@ export function NavidromeCredentialsForm() {
             id="navidrome-username"
             type="text"
             value={formData.username}
-            onChange={(e) => setFormData((prev) => ({ ...prev, username: e.target.value }))}
+            onChange={(e) =>
+              setFormData((prev) => ({ ...prev, username: e.target.value }))
+            }
             placeholder="your-username"
             disabled={navidrome.isConnected || isConnecting}
             className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm placeholder:text-zinc-400 focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-green-500 dark:focus:ring-green-500"
           />
           {errors.username && (
-            <p className="text-sm text-red-600 dark:text-red-400">{errors.username}</p>
+            <p className="text-sm text-red-600 dark:text-red-400">
+              {errors.username}
+            </p>
           )}
         </div>
 
@@ -181,9 +198,11 @@ export function NavidromeCredentialsForm() {
           <div className="relative">
             <input
               id="navidrome-password"
-              type={showPassword ? 'text' : 'password'}
+              type={showPassword ? "text" : "password"}
               value={formData.password}
-              onChange={(e) => setFormData((prev) => ({ ...prev, password: e.target.value }))}
+              onChange={(e) =>
+                setFormData((prev) => ({ ...prev, password: e.target.value }))
+              }
               placeholder="••••••••"
               disabled={navidrome.isConnected || isConnecting}
               className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 pr-10 text-sm placeholder:text-zinc-400 focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-green-500 dark:focus:ring-green-500"
@@ -195,7 +214,12 @@ export function NavidromeCredentialsForm() {
               className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {showPassword ? (
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg
+                  className="h-5 w-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -204,7 +228,12 @@ export function NavidromeCredentialsForm() {
                   />
                 </svg>
               ) : (
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg
+                  className="h-5 w-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -222,7 +251,9 @@ export function NavidromeCredentialsForm() {
             </button>
           </div>
           {errors.password && (
-            <p className="text-sm text-red-600 dark:text-red-400">{errors.password}</p>
+            <p className="text-sm text-red-600 dark:text-red-400">
+              {errors.password}
+            </p>
           )}
         </div>
 
@@ -241,11 +272,15 @@ export function NavidromeCredentialsForm() {
               <button
                 type="submit"
                 disabled={isConnecting}
-                className="flex-1 rounded-md bg-green-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-green-700 disabled:opacity-50 disabled:hover:bg-green-700"
+                className="flex-1 rounded-md bg-green-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-green-700 disabled:opacity-50 disabled:hover:bg-green-700 hover:cursor-pointer"
               >
                 {isConnecting ? (
                   <span className="flex items-center justify-center gap-2">
-                    <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <svg
+                      className="h-4 w-4 animate-spin"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
                       <circle
                         className="opacity-25"
                         cx="12"
@@ -263,7 +298,7 @@ export function NavidromeCredentialsForm() {
                     Connecting...
                   </span>
                 ) : (
-                  'Connect'
+                  "Connect"
                 )}
               </button>
             </>
@@ -271,5 +306,5 @@ export function NavidromeCredentialsForm() {
         </div>
       </form>
     </div>
-  );
+  )
 }

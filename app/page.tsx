@@ -1,38 +1,40 @@
-'use client';
+"use client"
 
-import { useEffect } from 'react';
-import { useAuth } from '@/lib/auth/auth-context';
-import { Dashboard } from '@/components/Dashboard';
-import { SpotifyConnectButton } from '@/components/spotify-connect-button';
-import { NavidromeCredentialsForm } from '@/components/navidrome-credentials-form';
-import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { useEffect } from "react"
+import { useAuth } from "@/lib/auth/auth-context"
+import { Dashboard } from "@/components/Dashboard"
+import { SpotifyConnectButton } from "@/components/spotify-connect-button"
+import { NavidromeCredentialsForm } from "@/components/navidrome-credentials-form"
+import { ErrorBoundary } from "@/components/ErrorBoundary"
+import Image from "next/image"
+import NavispotLogo from "@/public/navispot.png"
 
 function GlobalErrorHandler() {
   useEffect(() => {
     const handleError = (event: ErrorEvent) => {
-      console.error('Global error caught:', event.error);
-      event.preventDefault();
-    };
+      console.error("Global error caught:", event.error)
+      event.preventDefault()
+    }
 
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-      console.error('Unhandled promise rejection:', event.reason);
-      event.preventDefault();
-    };
+      console.error("Unhandled promise rejection:", event.reason)
+      event.preventDefault()
+    }
 
-    window.addEventListener('error', handleError);
-    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+    window.addEventListener("error", handleError)
+    window.addEventListener("unhandledrejection", handleUnhandledRejection)
 
     return () => {
-      window.removeEventListener('error', handleError);
-      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
-    };
-  }, []);
+      window.removeEventListener("error", handleError)
+      window.removeEventListener("unhandledrejection", handleUnhandledRejection)
+    }
+  }, [])
 
-  return null;
+  return null
 }
 
 export default function Home() {
-  const { isLoading, spotify, navidrome } = useAuth();
+  const { isLoading, spotify, navidrome } = useAuth()
 
   if (isLoading) {
     return (
@@ -42,10 +44,10 @@ export default function Home() {
           <p className="text-sm text-zinc-600 dark:text-zinc-400">Loading...</p>
         </div>
       </div>
-    );
+    )
   }
 
-  const isAuthenticated = spotify.isAuthenticated && navidrome.isConnected;
+  const isAuthenticated = spotify.isAuthenticated && navidrome.isConnected
 
   if (isAuthenticated) {
     return (
@@ -56,7 +58,9 @@ export default function Home() {
             fallback={
               <div className="flex min-h-screen items-center justify-center">
                 <div className="text-center">
-                  <p className="text-red-500 mb-4">Something went wrong with the Dashboard</p>
+                  <p className="text-red-500 mb-4">
+                    Something went wrong with the Dashboard
+                  </p>
                   <button
                     onClick={() => window.location.reload()}
                     className="px-4 py-2 bg-blue-500 text-white rounded-lg"
@@ -71,15 +75,23 @@ export default function Home() {
           </ErrorBoundary>
         </main>
       </div>
-    );
+    )
   }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-zinc-50 px-4 py-12 dark:bg-black sm:px-6 lg:px-8">
       <main className="w-full max-w-md space-y-8">
         <div className="text-center">
+          <div className="flex justify-center">
+            <Image
+              src={NavispotLogo}
+              alt="Navispot logo"
+              width={100}
+              height={100}
+            />
+          </div>
           <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
-            NaviSpot-Plist
+            NaviSpot
           </h1>
           <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
             Export your Spotify playlists to Navidrome
@@ -105,5 +117,5 @@ export default function Home() {
         </div>
       </main>
     </div>
-  );
+  )
 }

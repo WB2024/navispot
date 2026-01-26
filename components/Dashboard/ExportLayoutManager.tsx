@@ -1,10 +1,10 @@
-import React, { ReactNode } from 'react';
+import React, { ReactNode } from "react"
 
 export interface ExportLayoutManagerProps {
-  selectedPlaylistsSection: ReactNode;
-  unmatchedSongsSection: ReactNode;
-  mainTableSection: ReactNode;
-  fixedExportButton: ReactNode;
+  selectedPlaylistsSection: ReactNode
+  unmatchedSongsSection: ReactNode
+  mainTableSection: ReactNode
+  fixedExportButton: ReactNode
 }
 
 export function ExportLayoutManager({
@@ -17,14 +17,14 @@ export function ExportLayoutManager({
     <div className="relative">
       {fixedExportButton}
 
-      <div className="flex flex-col h-[calc(100vh-100px)]">
+      <div className="flex flex-col h-[calc(100vh-64px)]">
         {/* Top Section - 50% height - Consistent across all stages */}
         <div className="h-[50%] flex gap-4 overflow-hidden">
           {/* Left Column - Selected Playlists (50% width) */}
           <div className="w-1/2 flex flex-col overflow-hidden">
             {selectedPlaylistsSection}
           </div>
-          
+
           {/* Right Column - Unmatched Songs (50% width) */}
           <div className="w-1/2 flex flex-col overflow-hidden">
             {unmatchedSongsSection}
@@ -37,5 +37,5 @@ export function ExportLayoutManager({
         </div>
       </div>
     </div>
-  );
+  )
 }
