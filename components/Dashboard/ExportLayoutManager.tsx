@@ -1,7 +1,6 @@
 import React, { ReactNode } from 'react';
 
 export interface ExportLayoutManagerProps {
-  progressBar?: ReactNode;
   selectedPlaylistsSection: ReactNode;
   unmatchedSongsSection: ReactNode;
   mainTableSection: ReactNode;
@@ -9,7 +8,6 @@ export interface ExportLayoutManagerProps {
 }
 
 export function ExportLayoutManager({
-  progressBar,
   selectedPlaylistsSection,
   unmatchedSongsSection,
   mainTableSection,
@@ -20,8 +18,6 @@ export function ExportLayoutManager({
       {fixedExportButton}
 
       <div className="flex flex-col h-[calc(100vh-100px)]">
-        {progressBar}
-
         {/* Top Section - 50% height - Consistent across all stages */}
         <div className="h-[50%] flex gap-4 overflow-hidden">
           {/* Left Column - Selected Playlists (50% width) */}

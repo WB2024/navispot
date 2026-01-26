@@ -606,14 +606,7 @@ export function Dashboard() {
     />
   );
 
-  const progressBar = isExporting && progressState && (
-    <div className="w-full bg-zinc-200 dark:bg-zinc-800 h-2 rounded-full overflow-hidden mb-4">
-      <div
-        className="bg-blue-500 h-full transition-all duration-300 ease-out"
-        style={{ width: `${progressState.progress.percent}%` }}
-      />
-    </div>
-  );
+
 
   if (!spotify.isAuthenticated) {
     return (
@@ -674,7 +667,6 @@ export function Dashboard() {
       />
 
       <ExportLayoutManager
-        progressBar={progressBar}
         selectedPlaylistsSection={selectedPlaylistsSection}
         unmatchedSongsSection={unmatchedSongsSection}
         mainTableSection={mainTableSection}
