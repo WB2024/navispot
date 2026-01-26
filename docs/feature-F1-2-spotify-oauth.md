@@ -138,6 +138,7 @@ Refreshes access tokens:
 3. **localStorage Fallback**: Synced token persisted to localStorage for subsequent page loads
 4. **IV Randomization**: Each encryption uses fresh random IV
 5. **Buffer Before Expiry**: Refresh 60 seconds before actual expiry
+6. **Automatic Refresh on Load**: Expired tokens in localStorage are automatically refreshed during app initialization using the refresh token, preventing unnecessary logouts
 
 ### Client-Side Session Sync Security
 
@@ -365,6 +366,26 @@ The auth context ensures:
 ✅ Client-side session sync via `/api/auth/session` endpoint
 ✅ Reverse proxy support: Extracts `x-forwarded-host` and `x-forwarded-proto` headers for correct redirect URLs in containerized deployments
 ✅ UI properly updates after OAuth callback redirect
+
+## Update Notes
+
+### January 26, 2026 - Improved Token Refresh During App Initialization
+
+**Issue:**
+When users returned to the app after their Spotify access token expired, they were automatically logged out instead of having their session silently renewed using the refresh token.
+
+**Solution:**
+The auth context (`lib/auth/auth-context.tsx`) now attempts to refresh expired tokens during initialization before clearing them:
+
+1. Added `refreshSpotifyTokenFromStorage` helper function
+2. Modified `loadStoredAuth` to attempt token refresh when expired token is found
+3. Only clears token and logs out user if refresh truly fails
+
+**Impact:**
+- Users stay logged in across sessions even when access tokens expire
+- Seamless user experience with automatic session renewal
+- No changes required to the `/api/auth/refresh` endpoint
+- Existing token encryption and security measures remain in place
 
 ## References
 

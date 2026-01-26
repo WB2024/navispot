@@ -18,8 +18,17 @@ The `AuthContext` centralizes all authentication-related state and methods, elim
 Spotify authentication tokens are persisted with the following behavior:
 - Tokens are stored in localStorage under the key `navispot_spotify_auth`
 - On initialization, the context loads stored tokens and validates their expiry
-- Expired tokens are automatically cleared to prevent authentication issues
+- Expired tokens are automatically refreshed using the refresh token before use
+- If refresh fails, the token is cleared and the user must re-authenticate
 - Tokens include access token, refresh token, expiry timestamp, token type, and scope
+
+**Token Refresh on Load:**
+When the app initializes and a stored token is expired:
+1. The `loadStoredAuth` function checks the token expiry
+2. If expired, it calls `refreshSpotifyTokenFromStorage` to attempt a refresh
+3. The refresh token is sent to the `/api/auth/refresh` endpoint
+4. If successful, the new access token is stored and user stays authenticated
+5. If refresh fails (e.g., refresh token expired), the token is cleared and user is logged out
 
 ### Persist Navidrome Credentials to localStorage
 
@@ -50,7 +59,8 @@ The context exposes a comprehensive API for authentication management:
 **Spotify Methods:**
 - `spotifyLogin()`: Initiates the Spotify OAuth flow by redirecting to the authorization endpoint
 - `spotifyLogout()`: Clears Spotify tokens from storage and state
-- `refreshSpotifyToken()`: Refreshes the access token using the refresh token
+- `refreshSpotifyToken()`: Refreshes the access token using the refresh token (public method)
+- `refreshSpotifyTokenFromStorage()`: Internal helper that refreshes expired tokens during initial load (private)
 
 **Navidrome Methods:**
 - `setNavidromeCredentials()`: Saves credentials and tests the connection
@@ -82,6 +92,8 @@ This file contains the complete implementation of the authentication context:
 - Internal state management for both Spotify and Navidrome
 - localStorage persistence logic
 - Connection testing for Navidrome
+- `refreshSpotifyTokenFromStorage`: Internal helper function that refreshes expired Spotify tokens during initial app load
+- `loadStoredAuth`: Loads and validates stored auth data, attempting to refresh expired Spotify tokens before clearing them
 
 ## Usage Examples
 
@@ -230,7 +242,9 @@ The Auth Context is in turn a dependency for:
 ### Initialization
 - Auth state is loaded asynchronously on app initialization
 - Loading state prevents premature rendering of unauthenticated views
-- Expired tokens are automatically detected and cleared
+- Expired tokens are automatically detected and refreshed using the refresh token
+- If refresh fails (e.g., refresh token expired), token is cleared and user must re-authenticate
+- This provides seamless user experience while maintaining security
 
 ### Error Handling
 - Connection failures are captured and exposed through the error state
@@ -300,3 +314,65 @@ The Auth Context feature is fully implemented and verified. All sub-tasks have b
 **Migration Note:**
 - Users must re-login after this update to generate new localStorage entry with `clientId`
 - Old localStorage entries without `clientId` will trigger automatic re-login
+
+### January 26, 2026 - Automatic Spotify Token Refresh on App Load
+
+**Issue Fixed:**
+When Spotify access tokens expired during app initialization, users were automatically logged out instead of having their tokens refreshed. This caused poor user experience as users had to re-authenticate frequently.
+
+**Changes Made:**
+
+1. **Added `refreshSpotifyTokenFromStorage` Helper Function**
+   - New internal helper function in `lib/auth/auth-context.tsx`
+   - Accepts an expired token and user information
+   - Attempts to refresh the token using the `/api/auth/refresh` endpoint
+   - Returns `true` on successful refresh, `false` on failure
+   - On success: Updates localStorage with new token and sets authenticated state
+   - On failure: Returns `false` so caller can clear the invalid token
+
+2. **Updated `loadStoredAuth` Function**
+   - Modified token expiry handling to attempt refresh before clearing
+   - Changed logic: Instead of immediately removing expired tokens, now tries to refresh first
+   - If refresh succeeds, user stays authenticated seamlessly
+   - If refresh fails (e.g., refresh token expired), then token is removed and user must re-authenticate
+
+**Behavior Changes:**
+- **Before:** Expired tokens → immediate removal → user logged out → must re-login
+- **After:** Expired tokens → attempt refresh → if success, user stays logged in → if fail, user logged out
+
+**Code Changes:**
+```typescript
+// Old behavior:
+if (parsed.token && parsed.token.expiresAt > Date.now()) {
+  setSpotify({ isAuthenticated: true, token: parsed.token, user: parsed.user });
+} else {
+  localStorage.removeItem(SPOTIFY_STORAGE_KEY); // Removes without attempting refresh!
+}
+
+// New behavior:
+if (parsed.token) {
+  const isExpired = parsed.token.expiresAt <= Date.now();
+  
+  if (isExpired) {
+    const refreshed = await refreshSpotifyTokenFromStorage(parsed.token, parsed.user);
+    if (refreshed) {
+      return; // Successfully refreshed, user stays authenticated
+    }
+    localStorage.removeItem(SPOTIFY_STORAGE_KEY); // Only remove if refresh failed
+  } else {
+    setSpotify({ isAuthenticated: true, token: parsed.token, user: parsed.user });
+  }
+}
+```
+
+**Benefits:**
+- Improved user experience - users stay logged in across sessions
+- Reduced need for manual re-authentication
+- Seamless token renewal during app initialization
+- Maintains security by logging out only when refresh truly fails (e.g., revoked refresh token)
+
+**Edge Cases Handled:**
+- Refresh token expired → User logged out (expected behavior)
+- Network error during refresh → User logged out (fallback to safe state)
+- Missing refresh token → User logged out (invalid token state)
+- Refresh endpoint unavailable → User logged out (fallback to safe state)

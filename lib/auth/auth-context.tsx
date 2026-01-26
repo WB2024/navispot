@@ -103,17 +103,59 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const refreshSpotifyTokenFromStorage = useCallback(async (token: SpotifyToken, user: SpotifyUser): Promise<boolean> => {
+    if (!token.refreshToken) return false;
+
+    try {
+      const response = await fetch('/api/auth/refresh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken: token.refreshToken }),
+      });
+
+      if (!response.ok) return false;
+
+      const newToken = await response.json();
+      const updatedToken: SpotifyToken = {
+        ...token,
+        accessToken: newToken.access_token,
+        expiresAt: Date.now() + newToken.expires_in * 1000,
+      };
+
+      localStorage.setItem(SPOTIFY_STORAGE_KEY, JSON.stringify({ token: updatedToken, user }));
+      setSpotify({
+        isAuthenticated: true,
+        token: updatedToken,
+        user,
+      });
+      return true;
+    } catch (error) {
+      console.error('Error refreshing Spotify token on load:', error);
+      return false;
+    }
+  }, []);
+
   const loadStoredAuth = useCallback(async () => {
     try {
       const storedSpotify = localStorage.getItem(SPOTIFY_STORAGE_KEY);
       if (storedSpotify) {
         const parsed = JSON.parse(storedSpotify) as { token: SpotifyToken; user: SpotifyUser };
-        if (parsed.token && parsed.token.expiresAt > Date.now()) {
-          setSpotify({
-            isAuthenticated: true,
-            token: parsed.token,
-            user: parsed.user,
-          });
+        if (parsed.token) {
+          const isExpired = parsed.token.expiresAt <= Date.now();
+          
+          if (isExpired) {
+            const refreshed = await refreshSpotifyTokenFromStorage(parsed.token, parsed.user);
+            if (refreshed) {
+              return;
+            }
+            localStorage.removeItem(SPOTIFY_STORAGE_KEY);
+          } else {
+            setSpotify({
+              isAuthenticated: true,
+              token: parsed.token,
+              user: parsed.user,
+            });
+          }
         } else {
           localStorage.removeItem(SPOTIFY_STORAGE_KEY);
         }
@@ -157,7 +199,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [testNavidromeConnection]);
+  }, [testNavidromeConnection, refreshSpotifyTokenFromStorage]);
 
   useEffect(() => {
     loadStoredAuth();
