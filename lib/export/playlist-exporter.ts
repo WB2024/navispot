@@ -1,7 +1,30 @@
-import { NavidromeApiClient } from '@/lib/navidrome/client';
+import { NavidromeApiClient, parseExportMetadata } from '@/lib/navidrome/client';
 import { TrackMatch } from '@/types/matching';
 
-export type ExportMode = 'create' | 'append' | 'overwrite';
+export type ExportMode = 'create' | 'append' | 'overwrite' | 'update';
+
+interface PlaylistExportData {
+  spotifyPlaylistId: string;
+  spotifySnapshotId: string;
+  playlistName: string;
+  navidromePlaylistId?: string;
+  exportedAt: string;
+  trackCount: number;
+  tracks: Record<string, {
+    spotifyTrackId: string;
+    navidromeSongId?: string;
+    status: 'matched' | 'ambiguous' | 'unmatched';
+    matchStrategy: string;
+    matchScore: number;
+    matchedAt: string;
+  }>;
+  statistics: {
+    total: number;
+    matched: number;
+    unmatched: number;
+    ambiguous: number;
+  };
+}
 
 export interface ExportProgress {
   current: number;
@@ -39,6 +62,7 @@ export interface PlaylistExporterOptions {
   existingPlaylistId?: string;
   skipUnmatched?: boolean;
   onProgress?: ProgressCallback;
+  cachedData?: PlaylistExportData;
 }
 
 export interface PlaylistExporter {
@@ -128,6 +152,85 @@ export class DefaultPlaylistExporter implements PlaylistExporter {
           const songIds = matchedTracks.map((m) => m.navidromeSong!.id);
           const result = await this.overwritePlaylist(options.existingPlaylistId, songIds);
           exported = result.success ? songIds.length : 0;
+          playlistId = options.existingPlaylistId;
+          break;
+        }
+        case 'update': {
+          if (!options.existingPlaylistId || !options.cachedData) {
+            throw new Error('existingPlaylistId and cachedData are required for update mode');
+          }
+
+          const currentSpotifyTrackIds = new Set(matches.map(m => m.spotifyTrack.id));
+          const cachedTrackIds = new Set(Object.keys(options.cachedData.tracks));
+
+          const newTrackIds = new Set<string>();
+          const newMatches: TrackMatch[] = [];
+
+          matches.forEach(match => {
+            const cachedStatus = options.cachedData?.tracks[match.spotifyTrack.id];
+            if (match.status === 'matched' && match.navidromeSong && !cachedStatus) {
+              newTrackIds.add(match.navidromeSong.id);
+              newMatches.push(match);
+            }
+          });
+
+          const removedSpotifyTrackIds: string[] = [];
+          cachedTrackIds.forEach(trackId => {
+            if (!currentSpotifyTrackIds.has(trackId)) {
+              removedSpotifyTrackIds.push(trackId);
+            }
+          });
+
+          if (newMatches.length > 0) {
+            const newSongIds = newMatches.map(m => m.navidromeSong!.id);
+            await this.navidromeClient.updatePlaylist(options.existingPlaylistId, newSongIds);
+          }
+
+          if (removedSpotifyTrackIds.length > 0) {
+            try {
+              const currentPlaylist = await this.navidromeClient.getPlaylist(options.existingPlaylistId);
+              const trackToEntryId = new Map<string, number>();
+              currentPlaylist.tracks.forEach((navSong, index) => {
+                const cachedTrack = options.cachedData ? Object.values(options.cachedData.tracks).find(
+                  t => t.navidromeSongId === navSong.id
+                ) : undefined;
+                if (cachedTrack) {
+                  trackToEntryId.set(cachedTrack.spotifyTrackId, index);
+                }
+              });
+
+              const entryIdsToRemove: number[] = [];
+              removedSpotifyTrackIds.forEach(trackId => {
+                const entryId = trackToEntryId.get(trackId);
+                if (entryId !== undefined) {
+                  entryIdsToRemove.push(entryId);
+                }
+              });
+
+              if (entryIdsToRemove.length > 0) {
+                await this.navidromeClient.updatePlaylist(options.existingPlaylistId, [], entryIdsToRemove);
+              }
+            } catch (error) {
+              console.warn('Failed to remove tracks from Navidrome playlist:', error);
+            }
+          }
+
+          if (newMatches.length > 0 || removedSpotifyTrackIds.length > 0) {
+            try {
+              const metadata = {
+                spotifyPlaylistId: options.cachedData.spotifyPlaylistId,
+                navidromePlaylistId: options.existingPlaylistId,
+                spotifySnapshotId: options.cachedData.spotifySnapshotId,
+                exportedAt: new Date().toISOString(),
+                trackCount: matches.length,
+              };
+              await this.navidromeClient.updatePlaylistComment(options.existingPlaylistId, metadata);
+            } catch (error) {
+              console.warn('Failed to update playlist comment:', error);
+            }
+          }
+
+          exported = newMatches.length;
           playlistId = options.existingPlaylistId;
           break;
         }

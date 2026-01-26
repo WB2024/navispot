@@ -590,3 +590,421 @@ interface BatchMatcherProgress {
 - Statistics badges (Total, Matched, Unmatched) update incrementally during matching
 - Status badges show "Exporting" during both phases
 - All UI elements stay synchronized throughout the export process
+
+---
+
+## Track Export Persistence & Differential Exports
+
+### Overview
+
+Track export status is persisted in browser localStorage to enable:
+1. **Instant visual feedback** - Colors loaded immediately on dashboard mount
+2. **Differential exports** - Only match/export new tracks, not entire playlist
+3. **Recovery from changes** - Survive playlist reordering and additions
+4. **Efficient updates** - Update existing Navidrome playlists instead of replacing
+
+### Storage Architecture
+
+#### localStorage Key Structure
+```
+Key: navispot-playlist-export-{spotifyPlaylistId}
+Value: JSON string of PlaylistExportData
+```
+
+#### Data Models
+
+```typescript
+interface TrackExportStatus {
+  spotifyTrackId: string;           // Primary key from Spotify
+  navidromeSongId?: string;        // Matched song ID (if exported)
+  status: 'matched' | 'ambiguous' | 'unmatched';
+  matchStrategy: 'isrc' | 'fuzzy' | 'strict' | 'none';
+  matchScore: number;              // 0-1 confidence score
+  matchedAt: string;               // ISO timestamp
+}
+
+interface PlaylistExportData {
+  spotifyPlaylistId: string;       // Playlist identifier
+  spotifySnapshotId: string;       // Detects playlist changes
+  playlistName: string;            // Display name
+  navidromePlaylistId?: string;    // Created playlist in Navidrome
+  exportedAt: string;              // Last export timestamp
+  trackCount: number;              // Number of tracks
+  tracks: Record<string, TrackExportStatus>;  // spotifyTrackId -> status
+  statistics: {
+    total: number;
+    matched: number;
+    unmatched: number;
+    ambiguous: number;
+  };
+}
+```
+
+### Cache Management
+
+#### Cache Invalidation Conditions
+1. **Playlist snapshot_id changes** → Invalidate cache, re-match all tracks
+2. **User manually clears cache** → Delete from localStorage
+3. **Navidrome playlist not found** → Recreate, update cache
+
+#### Cache Operations
+```typescript
+// Save playlist export data to localStorage
+savePlaylistExportData(playlistId: string, data: PlaylistExportData): void
+
+// Load playlist export data from localStorage
+loadPlaylistExportData(playlistId: string): PlaylistExportData | null
+
+// Delete playlist export data from localStorage
+deletePlaylistExportData(playlistId: string): void
+
+// Get all saved export data
+getAllExportData(): Map<string, PlaylistExportData>
+
+// Check if playlist is up-to-date (snapshot matches)
+isPlaylistUpToDate(data: PlaylistExportData, currentSnapshotId: string): boolean
+```
+
+### Differential Export Algorithm
+
+#### Diff Calculation
+```typescript
+function calculateDiff(
+  currentTracks: SpotifyTrack[],
+  cachedData: PlaylistExportData
+): {
+  newTracks: SpotifyTrack[];              // Not in cache
+  unchangedTracks: {                      // Already exported, keep them
+    spotifyTrack: SpotifyTrack;
+    cachedStatus: TrackExportStatus;
+  }[];
+  removedTracks: string[];                // Spotify IDs no longer in playlist
+}
+```
+
+**Process:**
+1. Compare current Spotify tracks with cached tracks by `spotifyTrackId`
+2. Identify new tracks (not in cache) → Need matching
+3. Identify unchanged tracks (in cache) → Skip matching, use cached data
+4. Identify removed tracks (no longer in playlist) → Mark for removal
+
+### Export Mode Decision Tree
+
+```
+Has cached export data?
+├─ No
+│  └─ Use mode='create' (new export)
+└─ Yes
+   ├─ Snapshot matches?
+   │  ├─ Yes
+   │  │  ├─ Navidrome playlist exists?
+   │  │  │  ├─ Yes → Use mode='update' (differential export)
+   │  │  │  │        • Match only new tracks
+   │  │  │  │        • Add new tracks to Navidrome playlist
+   │  │  │  │        • Remove deleted tracks from Navidrome playlist
+   │  │  │  │        • Update localStorage
+   │  │  │  └─ No → Use mode='create' (playlist lost, recreate)
+   │  └─ No → Use mode='create' (playlist changed, invalidate cache, re-export)
+   └─ Snapshot mismatch → Invalidate cache, re-match all tracks
+```
+
+### Export Mode Updates
+
+#### Updated Export Mode
+```typescript
+export type ExportMode = 'create' | 'append' | 'overwrite' | 'update';
+```
+
+#### New Option
+```typescript
+interface PlaylistExporterOptions {
+  mode?: ExportMode;
+  existingPlaylistId?: string;
+  skipUnmatched?: boolean;
+  onProgress?: ProgressCallback;
+  cachedData?: PlaylistExportData;  // NEW: For differential export
+}
+```
+
+### Implementation Components
+
+#### File: `lib/export/track-export-cache.ts`
+
+**Responsibilities:**
+- Manage localStorage CRUD operations for `PlaylistExportData`
+- Cache validation and expiry checks
+- Diff calculation for differential exports
+- Cache cleanup and maintenance
+
+**Key Functions:**
+```typescript
+export function savePlaylistExportData(playlistId: string, data: PlaylistExportData): void
+export function loadPlaylistExportData(playlistId: string): PlaylistExportData | null
+export function deletePlaylistExportData(playlistId: string): void
+export function getAllExportData(): Map<string, PlaylistExportData>
+export function isPlaylistUpToDate(data: PlaylistExportData, currentSnapshotId: string): boolean
+export function calculateDiff(currentTracks: SpotifyTrack[], cachedData: PlaylistExportData): DiffResult
+export function clearExpiredCache(): void
+```
+
+#### File: `lib/matching/batch-matcher.ts`
+
+**New Method:**
+```typescript
+async matchTracksDifferential(
+  tracks: SpotifyTrack[],
+  cachedTracks: Record<string, TrackExportStatus>,
+  options: BatchMatcherOptions,
+  onProgress?: ProgressCallback
+): Promise<{
+  matches: TrackMatch[];
+  statistics: Statistics;
+  newTracks: SpotifyTrack[];      // Tracks that needed matching
+  cachedMatches: TrackMatch[];     // Tracks with cached status
+}>
+```
+
+**Behavior:**
+- Only match `tracks` not found in `cachedTracks`
+- For cached tracks, create `TrackMatch` objects from cached status
+- Combine both sets for return
+- Update progress callback with combined statistics
+
+#### File: `lib/export/playlist-exporter.ts`
+
+**Updated `exportPlaylist` Method:**
+
+```typescript
+async exportPlaylist(
+  playlistName: string,
+  matches: TrackMatch[],
+  options: PlaylistExporterOptions = {}
+): Promise<ExportResult> {
+  const mode = options.mode ?? 'create';
+  const cachedData = options.cachedData;
+
+  // Differential export mode
+  if (mode === 'update' && cachedData) {
+    const { newTracks, removedTracks } = calculateDiff(matches, cachedData);
+
+    // Add new tracks to Navidrome playlist
+    if (newTracks.length > 0) {
+      const newSongIds = newTracks
+        .filter(m => m.navidromeSong)
+        .map(m => m.navidromeSong!.id);
+      await this.navidromeClient.updatePlaylist(
+        cachedData.navidromePlaylistId!,
+        newSongIds
+      );
+    }
+
+    // Remove deleted tracks from Navidrome playlist
+    if (removedTracks.length > 0) {
+      const entryIdsToRemove = cachedData.tracks[removedTrackId].entryId;
+      await this.navidromeClient.updatePlaylist(
+        cachedData.navidromePlaylistId!,
+        [],
+        entryIdsToRemove
+      );
+    }
+
+    // Update cached data with new tracks
+    const updatedData = { ...cachedData, /* updated tracks */ };
+    await savePlaylistExportData(playlistName, updatedData);
+
+    return { success: true, /* statistics */ };
+  }
+
+  // Existing create/append/overwrite logic...
+}
+```
+
+#### File: `components/Dashboard/Dashboard.tsx`
+
+**New State:**
+```typescript
+const [trackExportCache, setTrackExportCache] = useState<Map<string, PlaylistExportData>>(new Map());
+```
+
+**Load Cache on Mount:**
+```typescript
+useEffect(() => {
+  const allData = getAllExportData();
+  setTrackExportCache(allData);
+}, []);
+```
+
+**Update Export Flow:**
+
+1. **Before matching:**
+```typescript
+const cachedData = loadPlaylistExportData(item.id);
+const isUpToDate = cachedData && isPlaylistUpToDate(cachedData, item.snapshot_id);
+```
+
+2. **During matching:**
+```typescript
+if (isUpToDate) {
+  // Use differential matching
+  const result = await batchMatcher.matchTracksDifferential(
+    tracks,
+    cachedData.tracks,
+    matcherOptions,
+    onProgress
+  );
+} else {
+  // Standard matching
+  const result = await batchMatcher.matchTracks(tracks, matcherOptions, onProgress);
+}
+```
+
+3. **After matching:**
+```typescript
+// Save track status to localStorage
+const playlistData: PlaylistExportData = {
+  spotifyPlaylistId: item.id,
+  spotifySnapshotId: item.snapshot_id,
+  playlistName: item.name,
+  navidromePlaylistId: existingPlaylistId,
+  exportedAt: new Date().toISOString(),
+  trackCount: tracks.length,
+  tracks: trackStatusMap,
+  statistics: { /* calculated from matches */ },
+};
+savePlaylistExportData(item.id, playlistData);
+```
+
+4. **During export:**
+```typescript
+const exporterOptions: PlaylistExporterOptions = {
+  mode: isUpToDate && existingPlaylistId ? 'update' : 'create',
+  existingPlaylistId: existingPlaylistId,
+  cachedData: isUpToDate ? cachedData : undefined,
+  skipUnmatched: false,
+  onProgress,
+};
+```
+
+### Visual Enhancements
+
+#### Songs Panel
+- **Row colors**: Already implemented (green = exported, red = failed, default = waiting)
+- **Status persistence**: Colors loaded from localStorage on mount
+- **Instant feedback**: No need to re-export to see status
+
+#### Selected Playlists Panel
+- **Existing status**: Exported badge matches cached data
+- **Progress**: Reuses cached match results for speed
+- **Statistics**: Aggregates from all cached playlists
+
+### Benefits
+
+✅ **Performance**
+- Only match new tracks, not entire playlist
+- Faster exports for existing playlists
+- Reduced Navidrome API calls
+
+✅ **Speed**
+- Update existing playlist instead of replacing
+- Batch operations for adding/removing tracks
+- Instant visual feedback from cache
+
+✅ **Reliability**
+- Survives playlist reordering (uses Spotify IDs)
+- Survives track additions and deletions
+- Recovers from partial exports
+
+✅ **User Experience**
+- Instant track status display on dashboard mount
+- Clear visual indicators for export status
+- Persistent across page refreshes
+
+✅ **Storage**
+- No server-side changes required
+- Pure localStorage implementation
+- Works offline (cache persists)
+
+✅ **Scalability**
+- Works for playlists of any size
+- Handles large playlists (>1000 tracks) with pagination
+- Efficient memory usage with Map data structures
+
+### Edge Cases
+
+1. **Navidrome playlist deleted**
+   - Detect: `getPlaylist` fails for cached `navidromePlaylistId`
+   - Action: Recreate with `mode='create'`, update cache
+
+2. **Playlist reordered in Spotify**
+   - Detect: Snapshot matches, track order changed
+   - Action: Differential export preserves Spotify order in Navidrome
+
+3. **Playlist name changed in Spotify**
+   - Detect: Name in cache differs from current
+   - Action: Update cached name, no re-export needed
+
+4. **Tracks removed from Spotify playlist**
+   - Detect: Track in cache not in current Spotify playlist
+   - Action: Remove from Navidrome playlist, update cache
+
+5. **Tracks added to Spotify playlist**
+   - Detect: Track in current Spotify playlist not in cache
+   - Action: Match new tracks, add to Navidrome playlist, update cache
+
+6. **Concurrent exports**
+   - Detect: Updated timestamp in cache changes during export
+   - Action: Use latest data, handle race conditions gracefully
+
+7. **Large playlists (>1000 tracks)**
+   - Action: Batch matching operations, paginated API calls
+   - Navidrome: Use `_start`/`_end` parameters for pagination
+
+8. **Failed matches persist**
+   - Action: Keep failed tracks in cache
+   - Benefit: Re-match on next export with updated Navidrome library
+
+### Storage Management
+
+#### Cache Expiry Strategy
+- **Recommended**: 90-day expiry
+- **Implementation**: Add `expiresAt` field to `PlaylistExportData`
+- **Cleanup**: Run `clearExpiredCache()` on dashboard mount
+
+#### Storage Size Estimation
+- Per track: ~200 bytes (Spotify ID + Navidrome ID + status + metadata)
+- 1000 tracks: ~200 KB
+- 100 playlists: ~20 MB total
+- Within typical localStorage limits (5-10 MB per domain)
+
+#### Cleanup Strategy
+```typescript
+// On dashboard mount
+clearExpiredCache();  // Remove expired entries
+
+// After successful export
+savePlaylistExportData(id, data);  // Update with fresh data
+
+// On user action (optional)
+deletePlaylistExportData(id);  // Manual cache clear per playlist
+localStorage.clear();  // Reset all data
+```
+
+### Testing Scenarios
+
+1. **First export**: No cache exists → Create new export, save cache
+2. **Second export (same playlist)**: Cache exists, snapshot matches → Differential export
+3. **Second export (changed playlist)**: Cache exists, snapshot mismatch → Invalidate, re-export
+4. **Export after refresh**: Cache loaded from localStorage → Instant colors, optional differential
+5. **Export deleted playlist**: Navidrome playlist missing → Recreate, update cache
+6. **Large playlist export**: 1000+ tracks → Batch operations, pagination
+7. **Failed track retry**: Track failed in cache → Re-match on next export
+8. **Concurrent exports**: Multiple playlists at once → Race condition handling
+
+### Future Enhancements
+
+- **Sync to Navidrome comment**: Optional cross-device sync for small playlists
+- **Export history**: Track multiple export snapshots per playlist
+- **Manual cache management**: UI for clearing/expiring cached data
+- **Export statistics dashboard**: Visualize export history and trends
+- **Batch cache operations**: Clear multiple playlists at once
+- **Import/Export cache**: Backup and restore cache data

@@ -18,6 +18,14 @@ import { createBatchMatcher, BatchMatcherOptions } from '@/lib/matching/batch-ma
 import { getMatchStatistics } from '@/lib/matching/orchestrator';
 import { createPlaylistExporter, PlaylistExporterOptions } from '@/lib/export/playlist-exporter';
 import { createFavoritesExporter } from '@/lib/export/favorites-exporter';
+import {
+  loadPlaylistExportData,
+  savePlaylistExportData,
+  getAllExportData,
+  isPlaylistUpToDate,
+  type PlaylistExportData,
+  type TrackExportStatus
+} from '@/lib/export/track-export-cache';
 import { PlaylistTableItem, PlaylistInfo } from '@/types/playlist-table';
 import { TrackMatch } from '@/types/matching';
 
@@ -75,6 +83,7 @@ export function Dashboard() {
   const [loadingTracks, setLoadingTracks] = useState(false);
   const [loadingPlaylistIds, setLoadingPlaylistIds] = useState<Set<string>>(new Set());
   const [songExportStatus, setSongExportStatus] = useState<Map<string, Map<number, 'waiting' | 'exported' | 'failed'>>>(new Map());
+  const [trackExportCache, setTrackExportCache] = useState<Map<string, PlaylistExportData>>(new Map());
 
   const isExportingRef = useRef(false);
 
@@ -126,10 +135,19 @@ export function Dashboard() {
   }, [spotify.isAuthenticated, spotify.token, navidrome.isConnected, navidrome.credentials, navidrome.token, navidrome.clientId]);
 
   useEffect(() => {
+    if (!spotify.isAuthenticated) return;
+    const allData = getAllExportData();
+    setTrackExportCache(allData);
+  }, [spotify.isAuthenticated]);
+
+  useEffect(() => {
     const items: PlaylistTableItem[] = playlists.map((playlist) => {
       let exportStatus: 'none' | 'exported' | 'out-of-sync' = 'none';
       let navidromePlaylistId: string | undefined;
       let lastExportedAt: string | undefined;
+
+      const cachedData = trackExportCache.get(playlist.id);
+      const hasCachedExport = cachedData && cachedData.navidromePlaylistId;
 
       if (navidromePlaylists.length > 0) {
         const navPlaylist = navidromePlaylists.find((np) => {
@@ -149,6 +167,10 @@ export function Dashboard() {
               exportStatus = 'out-of-sync';
             }
           }
+        } else if (hasCachedExport) {
+          exportStatus = 'exported';
+          navidromePlaylistId = cachedData.navidromePlaylistId;
+          lastExportedAt = cachedData.exportedAt;
         }
       }
 
@@ -168,7 +190,7 @@ export function Dashboard() {
     });
 
     setTableItems(items);
-  }, [playlists, navidromePlaylists, selectedIds]);
+  }, [playlists, navidromePlaylists, selectedIds, trackExportCache]);
 
   useEffect(() => {
     if (isExportingRef.current) {
@@ -199,42 +221,48 @@ export function Dashboard() {
     const selectedPlaylists: SelectedPlaylist[] = [];
 
     if (selectedIds.has(LIKED_SONGS_ID)) {
+      const likedSongsCachedData = trackExportCache.get(LIKED_SONGS_ID);
+      const hasCachedExport = likedSongsCachedData?.navidromePlaylistId;
+
       selectedPlaylists.push({
         id: LIKED_SONGS_ID,
         name: 'Liked Songs',
         total: likedSongsCount,
-        matched: 0,
-        unmatched: 0,
-        exported: 0,
+        matched: likedSongsCachedData?.statistics.matched ?? 0,
+        unmatched: likedSongsCachedData?.statistics.unmatched ?? 0,
+        exported: likedSongsCachedData?.statistics.matched ?? 0,
         failed: 0,
-        status: 'pending',
-        progress: 0,
+        status: hasCachedExport ? 'exported' : 'pending',
+        progress: hasCachedExport ? 100 : 0,
       });
     }
 
     playlists
       .filter((p) => selectedIds.has(p.id))
       .forEach((p) => {
+        const cachedData = trackExportCache.get(p.id);
+        const hasCachedExport = cachedData?.navidromePlaylistId;
+
         selectedPlaylists.push({
           id: p.id,
           name: p.name,
           total: p.tracks.total,
-          matched: 0,
-          unmatched: 0,
-          exported: 0,
-          failed: 0,
-          status: 'pending',
-          progress: 0,
+          matched: cachedData?.statistics.matched ?? 0,
+          unmatched: cachedData?.statistics.unmatched ?? 0,
+          exported: cachedData?.statistics.matched ?? 0,
+          failed: cachedData?.statistics.unmatched ?? 0,
+          status: hasCachedExport ? 'exported' : 'pending',
+          progress: hasCachedExport ? 100 : 0,
         });
       });
 
     setSelectedPlaylistsStats(selectedPlaylists);
-    
+
     // Auto-check all selected playlists by default
     if (selectedPlaylists.length > 0) {
       setCheckedPlaylistIds(new Set(selectedPlaylists.map(p => p.id)));
     }
-  }, [selectedIds, playlists, likedSongsCount, isExporting]);
+  }, [selectedIds, playlists, likedSongsCount, isExporting, trackExportCache]);
 
   // Fetch tracks for checked playlists
   useEffect(() => {
@@ -303,6 +331,39 @@ export function Dashboard() {
 
     fetchTracks();
   }, [checkedPlaylistIds, spotify.token, playlistTracksCache]);
+
+  useEffect(() => {
+    if (selectedIds.size === 0) return;
+
+    const newStatus = new Map<string, Map<number, 'waiting' | 'exported' | 'failed'>>();
+
+    selectedIds.forEach(playlistId => {
+      const cachedData = loadPlaylistExportData(playlistId);
+      if (cachedData) {
+        const playlistStatus = new Map();
+        const songs = playlistTracksCache.get(playlistId);
+        if (songs) {
+          songs.forEach((song, index) => {
+            const spotifyTrackId = Object.keys(cachedData.tracks).find(trackId => {
+              const cachedTrack = cachedData.tracks[trackId];
+              return cachedTrack.spotifyTrackId === trackId;
+            });
+            if (spotifyTrackId) {
+              const cachedStatus = cachedData.tracks[spotifyTrackId];
+              playlistStatus.set(index, cachedStatus.status === 'matched' ? 'exported' : 'failed');
+            } else {
+              playlistStatus.set(index, 'waiting');
+            }
+          });
+        }
+        newStatus.set(playlistId, playlistStatus);
+      }
+    });
+
+    if (newStatus.size > 0) {
+      setSongExportStatus(newStatus);
+    }
+  }, [selectedIds, playlistTracksCache]);
 
   const filteredItems = useMemo(() => {
     let result = [...tableItems];
@@ -486,6 +547,8 @@ export function Dashboard() {
 
         let tracks: SpotifyTrack[];
         let isLikedSongs = false;
+        let cachedData: PlaylistExportData | undefined = undefined;
+        let useDifferentialMatching = false;
 
         if ('isLikedSongs' in item && item.isLikedSongs) {
           const savedTracks = await spotifyClient.getAllSavedTracks();
@@ -493,6 +556,12 @@ export function Dashboard() {
           isLikedSongs = true;
         } else {
           tracks = (await spotifyClient.getAllPlaylistTracks(item.id)).map((t) => t.track);
+          
+          // Check for cached export data
+          cachedData = loadPlaylistExportData(item.id);
+          const upToDate = cachedData ? isPlaylistUpToDate(cachedData, item.snapshot_id || '') : false;
+          const hasNavidromePlaylist = !!cachedData?.navidromePlaylistId;
+          useDifferentialMatching = upToDate && hasNavidromePlaylist;
         }
 
         progress = updateProgress(progress, {
@@ -500,54 +569,112 @@ export function Dashboard() {
         });
         setProgressState(progress);
 
-        const { matches } = await batchMatcher.matchTracks(
-          tracks,
-          matcherOptions,
-          async (batchProgress) => {
-            progress = updateProgress(progress, {
-              phase: 'matching',
-              currentTrack: batchProgress.currentTrack
-                ? {
-                    name: batchProgress.currentTrack.name,
-                    artist: batchProgress.currentTrack.artists?.map((a) => a.name).join(', ') || 'Unknown',
-                    index: batchProgress.current - 1,
-                    total: batchProgress.total,
-                  }
-                : undefined,
-              progress: {
-                current: batchProgress.current,
-                total: batchProgress.total,
-                percent: batchProgress.percent,
-              },
-            });
-            setProgressState({ ...progress });
-            setSelectedPlaylistsStats((prev) =>
-              prev.map((stat, idx) =>
-                idx === i ? {
-                  ...stat,
-                  progress: batchProgress.percent,
-                  matched: batchProgress.matched ?? stat.matched,
-                  unmatched: batchProgress.unmatched ?? stat.unmatched,
-                } : stat
-              )
-            );
-            if (batchProgress.currentMatch) {
-              const trackIndex = batchProgress.current - 1;
-              const match = batchProgress.currentMatch;
-              setSongExportStatus((prev) => {
-                const newStatus = new Map(prev);
-                const playlistStatus = new Map(prev.get(item.id) || []);
-                if (match.status === 'matched' || match.status === 'ambiguous') {
-                  playlistStatus.set(trackIndex, 'exported');
-                } else {
-                  playlistStatus.set(trackIndex, 'failed');
-                }
-                newStatus.set(item.id, playlistStatus);
-                return newStatus;
+        let matches: TrackMatch[];
+        let newTracks: SpotifyTrack[] = [];
+
+        if (useDifferentialMatching && cachedData) {
+          const result = await batchMatcher.matchTracksDifferential(
+            tracks,
+            cachedData.tracks,
+            matcherOptions,
+            async (batchProgress) => {
+              progress = updateProgress(progress, {
+                phase: 'matching',
+                currentTrack: batchProgress.currentTrack
+                  ? {
+                      name: batchProgress.currentTrack.name,
+                      artist: batchProgress.currentTrack.artists?.map((a) => a.name).join(', ') || 'Unknown',
+                      index: batchProgress.current - 1,
+                      total: batchProgress.total,
+                    }
+                  : undefined,
+                progress: {
+                  current: batchProgress.current,
+                  total: batchProgress.total,
+                  percent: batchProgress.percent,
+                },
               });
+              setProgressState({ ...progress });
+              setSelectedPlaylistsStats((prev) =>
+                prev.map((stat, idx) =>
+                  idx === i ? {
+                    ...stat,
+                    progress: batchProgress.percent,
+                    matched: batchProgress.matched ?? stat.matched,
+                    unmatched: batchProgress.unmatched ?? stat.unmatched,
+                  } : stat
+                )
+              );
+              if (batchProgress.currentMatch) {
+                const trackIndex = batchProgress.current - 1;
+                const match = batchProgress.currentMatch;
+                setSongExportStatus((prev) => {
+                  const newStatus = new Map(prev);
+                  const playlistStatus = new Map(prev.get(item.id) || []);
+                  if (match.status === 'matched' || match.status === 'ambiguous') {
+                    playlistStatus.set(trackIndex, 'exported');
+                  } else {
+                    playlistStatus.set(trackIndex, 'failed');
+                  }
+                  newStatus.set(item.id, playlistStatus);
+                  return newStatus;
+                });
+              }
             }
-          }
-        );
+          );
+          matches = result.matches;
+          newTracks = result.newTracks;
+        } else {
+          matches = (await batchMatcher.matchTracks(
+            tracks,
+            matcherOptions,
+            async (batchProgress) => {
+              progress = updateProgress(progress, {
+                phase: 'matching',
+                currentTrack: batchProgress.currentTrack
+                  ? {
+                      name: batchProgress.currentTrack.name,
+                      artist: batchProgress.currentTrack.artists?.map((a) => a.name).join(', ') || 'Unknown',
+                      index: batchProgress.current - 1,
+                      total: batchProgress.total,
+                    }
+                  : undefined,
+                progress: {
+                  current: batchProgress.current,
+                  total: batchProgress.total,
+                  percent: batchProgress.percent,
+                },
+              });
+              setProgressState({ ...progress });
+              setSelectedPlaylistsStats((prev) =>
+                prev.map((stat, idx) =>
+                  idx === i ? {
+                    ...stat,
+                    progress: batchProgress.percent,
+                    matched: batchProgress.matched ?? stat.matched,
+                    unmatched: batchProgress.unmatched ?? stat.unmatched,
+                  } : stat
+                )
+              );
+              if (batchProgress.currentMatch) {
+                const trackIndex = batchProgress.current - 1;
+                const match = batchProgress.currentMatch;
+                setSongExportStatus((prev) => {
+                  const newStatus = new Map(prev);
+                  const playlistStatus = new Map(prev.get(item.id) || []);
+                  if (match.status === 'matched' || match.status === 'ambiguous') {
+                    playlistStatus.set(trackIndex, 'exported');
+                  } else {
+                    playlistStatus.set(trackIndex, 'failed');
+                  }
+                  newStatus.set(item.id, playlistStatus);
+                  return newStatus;
+                });
+              }
+            }
+          )).matches;
+          newTracks = tracks;
+        }
 
         const statistics = getMatchStatistics(matches);
 
@@ -558,6 +685,91 @@ export function Dashboard() {
               : stat
           )
         );
+
+        // Save track status to cache after matching
+        if (!isLikedSongs) {
+          const tracksData: Record<string, TrackExportStatus> = {};
+          let matchedCount = 0;
+          let unmatchedCount = 0;
+          let ambiguousCount = 0;
+
+          if (!useDifferentialMatching && cachedData) {
+            tracks.forEach((track, index) => {
+              const match = matches[index];
+              if (match) {
+                const status: TrackExportStatus = {
+                  spotifyTrackId: track.id,
+                  navidromeSongId: match.navidromeSong?.id,
+                  status: match.status,
+                  matchStrategy: match.matchStrategy,
+                  matchScore: match.matchScore,
+                  matchedAt: new Date().toISOString(),
+                };
+                tracksData[track.id] = status;
+
+                if (match.status === 'matched') {
+                  matchedCount++;
+                } else if (match.status === 'ambiguous') {
+                  ambiguousCount++;
+                } else {
+                  unmatchedCount++;
+                }
+              }
+            });
+          } else if (useDifferentialMatching && cachedData) {
+            Object.keys(cachedData.tracks).forEach(spotifyTrackId => {
+              tracksData[spotifyTrackId] = cachedData.tracks[spotifyTrackId];
+              const cachedStatus = cachedData.tracks[spotifyTrackId];
+              if (cachedStatus.status === 'matched') {
+                matchedCount++;
+              } else if (cachedStatus.status === 'ambiguous') {
+                ambiguousCount++;
+              } else {
+                unmatchedCount++;
+              }
+            });
+            newTracks.forEach(track => {
+              const match = matches.find(m => m.spotifyTrack.id === track.id);
+              if (match) {
+                const status: TrackExportStatus = {
+                  spotifyTrackId: track.id,
+                  navidromeSongId: match.navidromeSong?.id,
+                  status: match.status,
+                  matchStrategy: match.matchStrategy,
+                  matchScore: match.matchScore,
+                  matchedAt: new Date().toISOString(),
+                };
+                tracksData[track.id] = status;
+                if (match.status === 'matched') {
+                  matchedCount++;
+                } else if (match.status === 'ambiguous') {
+                  ambiguousCount++;
+                } else {
+                  unmatchedCount++;
+                }
+              }
+            });
+          }
+
+          const playlistData: PlaylistExportData = {
+            spotifyPlaylistId: item.id,
+            spotifySnapshotId: item.snapshot_id || '',
+            playlistName: item.name,
+            navidromePlaylistId: cachedData?.navidromePlaylistId,
+            exportedAt: new Date().toISOString(),
+            trackCount: tracks.length,
+            tracks: tracksData,
+            statistics: {
+              total: tracks.length,
+              matched: matchedCount,
+              unmatched: unmatchedCount,
+              ambiguous: ambiguousCount,
+            },
+          };
+
+          savePlaylistExportData(item.id, playlistData);
+          setTrackExportCache(prev => new Map(prev).set(item.id, playlistData));
+        }
 
         const unmatchedSongsList: UnmatchedSong[] = matches
           .filter((m: TrackMatch) => m.status === 'unmatched')
@@ -621,6 +833,16 @@ export function Dashboard() {
             },
           };
 
+          // Update cache for favorites export
+          if (cachedData) {
+            const updatedCache: PlaylistExportData = {
+              ...cachedData,
+              exportedAt: new Date().toISOString(),
+            };
+            savePlaylistExportData(item.id, updatedCache);
+            setTrackExportCache(prev => new Map(prev).set(item.id, updatedCache));
+          }
+
           if (i === itemsToExport.length - 1) {
             setShowSuccess(true);
             setTimeout(() => {
@@ -630,8 +852,10 @@ export function Dashboard() {
           }
         } else {
           const exporterOptions: PlaylistExporterOptions = {
-            mode: 'create',
+            mode: useDifferentialMatching && cachedData?.navidromePlaylistId ? 'update' : 'create',
+            existingPlaylistId: cachedData?.navidromePlaylistId,
             skipUnmatched: false,
+            cachedData: useDifferentialMatching ? cachedData : undefined,
             onProgress: async (exportProgress) => {
               progress = updateProgress(progress, {
                 phase: exportProgress.status === 'completed' ? 'completed' : 'exporting',
@@ -674,6 +898,48 @@ export function Dashboard() {
               failed: result.statistics.failed,
             },
           };
+
+          // Update cache with final export data
+          if (result.playlistId) {
+            const tracksData: Record<string, TrackExportStatus> = {};
+
+            tracks.forEach((track, index) => {
+              const match = matches[index];
+              if (match) {
+                const isAlreadyCached = cachedData?.tracks[track.id];
+                if (!isAlreadyCached || useDifferentialMatching && newTracks.includes(track)) {
+                  tracksData[track.id] = {
+                    spotifyTrackId: track.id,
+                    navidromeSongId: match.navidromeSong?.id,
+                    status: match.status,
+                    matchStrategy: match.matchStrategy,
+                    matchScore: match.matchScore,
+                    matchedAt: new Date().toISOString(),
+                  };
+                } else if (cachedData) {
+                  tracksData[track.id] = cachedData.tracks[track.id];
+                }
+              }
+            });
+
+            const updatedCache: PlaylistExportData = {
+              spotifyPlaylistId: item.id,
+              spotifySnapshotId: item.snapshot_id || '',
+              playlistName: item.name,
+              navidromePlaylistId: result.playlistId,
+              exportedAt: new Date().toISOString(),
+              trackCount: tracks.length,
+              tracks: cachedData ? { ...cachedData.tracks, ...tracksData } : tracksData,
+              statistics: {
+                total: tracks.length,
+                matched: statistics.matched,
+                unmatched: statistics.unmatched,
+                ambiguous: statistics.ambiguous,
+              },
+            };
+            savePlaylistExportData(item.id, updatedCache);
+            setTrackExportCache(prev => new Map(prev).set(item.id, updatedCache));
+          }
         }
 
         setSelectedPlaylistsStats((prev) =>

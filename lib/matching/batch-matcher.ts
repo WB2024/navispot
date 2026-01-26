@@ -3,6 +3,7 @@ import { NavidromeApiClient } from '@/lib/navidrome/client';
 import { SpotifyPlaylistTrack, SpotifyTrack } from '@/types/spotify';
 import { TrackMatch, MatchStrategy } from '@/types/matching';
 import { matchTracks, getMatchStatistics, MatchingOrchestratorOptions as OrchestratorOptions, defaultMatchingOptions } from './orchestrator';
+import { TrackExportStatus } from '@/lib/export/track-export-cache';
 
 export interface BatchMatcherProgress {
   current: number;
@@ -51,6 +52,12 @@ export interface BatchMatcher {
     options?: BatchMatcherOptions,
     onProgress?: ProgressCallback
   ): Promise<{ matches: TrackMatch[]; statistics: BatchMatchResult['statistics'] }>;
+  matchTracksDifferential(
+    tracks: SpotifyTrack[],
+    cachedTracks: Record<string, TrackExportStatus>,
+    options?: BatchMatcherOptions,
+    onProgress?: ProgressCallback
+  ): Promise<{ matches: TrackMatch[]; statistics: BatchMatchResult['statistics']; newTracks: SpotifyTrack[]; cachedMatches: TrackMatch[] }>;
 }
 
 export class DefaultBatchMatcher implements BatchMatcher {
@@ -180,8 +187,137 @@ export class DefaultBatchMatcher implements BatchMatcher {
     }
 
     const statistics = getMatchStatistics(matches) as BatchMatchResult['statistics'];
-
+    
     return { matches, statistics };
+  }
+
+  async matchTracksDifferential(
+    tracks: SpotifyTrack[],
+    cachedTracks: Record<string, TrackExportStatus>,
+    options: BatchMatcherOptions = {},
+    onProgress?: ProgressCallback
+  ): Promise<{ matches: TrackMatch[]; statistics: BatchMatchResult['statistics']; newTracks: SpotifyTrack[]; cachedMatches: TrackMatch[] }> {
+    const orchestratorOptions: Partial<OrchestratorOptions> = {
+      enableISRC: options.enableISRC ?? defaultMatchingOptions.enableISRC,
+      enableFuzzy: options.enableFuzzy ?? defaultMatchingOptions.enableFuzzy,
+      enableStrict: options.enableStrict ?? defaultMatchingOptions.enableStrict,
+      fuzzyThreshold: options.fuzzyThreshold ?? defaultMatchingOptions.fuzzyThreshold,
+      maxSearchResults: options.maxSearchResults ?? defaultMatchingOptions.maxSearchResults,
+    };
+
+    const tracksToMatch: SpotifyTrack[] = [];
+    const tracksFromCache: Array<{ track: SpotifyTrack; cachedStatus: TrackExportStatus }> = [];
+
+    tracks.forEach(track => {
+      const cachedStatus = cachedTracks[track.id];
+      if (cachedStatus) {
+        tracksFromCache.push({ track, cachedStatus });
+      } else {
+        tracksToMatch.push(track);
+      }
+    });
+
+    const concurrency = options.concurrency ?? 1;
+    let newMatches: TrackMatch[] = [];
+
+    if (tracksToMatch.length > 0) {
+      if (concurrency <= 1) {
+        for (let i = 0; i < tracksToMatch.length; i++) {
+          const track = tracksToMatch[i];
+          const match = await matchTracks(this.navidromeClient, [track], orchestratorOptions);
+          newMatches.push(match[0]);
+        }
+      } else {
+        const chunks: SpotifyTrack[][] = [];
+        for (let i = 0; i < tracksToMatch.length; i += concurrency) {
+          chunks.push(tracksToMatch.slice(i, i + concurrency));
+        }
+
+        for (const chunk of chunks) {
+          const chunkResults = await Promise.all(
+            chunk.map(async (track) => {
+              const result = await matchTracks(this.navidromeClient, [track], orchestratorOptions);
+              return result[0];
+            })
+          );
+          newMatches.push(...chunkResults);
+        }
+      }
+    }
+
+    const cachedMatches: TrackMatch[] = tracksFromCache.map(({ track, cachedStatus }) => {
+      if (cachedStatus.status === 'matched' || cachedStatus.status === 'ambiguous') {
+        const navidromeSong = cachedStatus.navidromeSongId ? {
+          id: cachedStatus.navidromeSongId,
+          title: track.name,
+          artist: track.artists?.[0]?.name || 'Unknown',
+          album: track.album?.name || 'Unknown',
+          duration: track.duration_ms,
+          isrc: track.external_ids?.isrc ? [track.external_ids.isrc] : undefined,
+        } : undefined;
+
+        return {
+          spotifyTrack: track,
+          navidromeSong,
+          matchScore: cachedStatus.matchScore,
+          matchStrategy: cachedStatus.matchStrategy as MatchStrategy,
+          status: cachedStatus.status,
+          candidates: undefined,
+        };
+      } else {
+        return {
+          spotifyTrack: track,
+          navidromeSong: undefined,
+          matchScore: 0,
+          matchStrategy: 'none' as MatchStrategy,
+          status: cachedStatus.status,
+          candidates: undefined,
+        };
+      }
+    });
+
+    const allMatches: TrackMatch[] = [];
+    const trackMap = new Map<string, TrackMatch>();
+
+    tracks.forEach(track => {
+      const cachedStatus = cachedTracks[track.id];
+      if (cachedStatus) {
+        const cachedMatch = cachedMatches.find(m => m.spotifyTrack.id === track.id);
+        if (cachedMatch) {
+          trackMap.set(track.id, cachedMatch);
+        }
+      }
+    });
+
+    newMatches.forEach(match => {
+      trackMap.set(match.spotifyTrack.id, match);
+    });
+
+    tracks.forEach(track => {
+      const match = trackMap.get(track.id);
+      if (match) {
+        allMatches.push(match);
+      }
+    });
+
+    const statistics = getMatchStatistics(allMatches) as BatchMatchResult['statistics'];
+
+    if (onProgress) {
+      await onProgress({
+        current: tracks.length,
+        total: tracks.length,
+        percent: 100,
+        matched: statistics.matched,
+        unmatched: statistics.unmatched + statistics.ambiguous,
+      });
+    }
+
+    return {
+      matches: allMatches,
+      statistics,
+      newTracks: tracksToMatch,
+      cachedMatches,
+    };
   }
 }
 
