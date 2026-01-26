@@ -166,9 +166,9 @@ Statistics are now displayed as inline badges in the Selected Playlists panel he
 **Badge Styles:**
 | Badge | Icon | Color | Description |
 |-------|------|-------|-------------|
-| Total | ≡ | Gray `bg-zinc-100 text-zinc-700` | Total tracks across selected playlists |
-| Matched | ✓ | Green `bg-green-100 text-green-800` | Successfully matched tracks |
-| Unmatched | ✗ | Red `bg-red-100 text-red-800` | Unmatched tracks |
+| Total | ≡ | Gray `bg-zinc-100 text-zinc-700` | Total number of tracks across all selected playlists (sum of track counts) |
+| Matched | ✓ | Green `bg-green-100 text-green-800` | Successfully matched tracks (populated during/after export) |
+| Unmatched | ✗ | Red `bg-red-100 text-red-800` | Unmatched tracks (populated during/after export) |
 
 ```tsx
 <div className="flex items-center gap-3">
@@ -370,49 +370,84 @@ The layout during export is identical to the before/after export layout. The onl
 - Cancel button visible in fixed footer (red)
 - Bottom table remains visible and scrollable
 
-### 2.4 Selected Playlists Table Features ✅ Updated
+### 2.4 Selected Playlists Table Features ✅ Updated (January 16, 2026)
 
 The Selected Playlists table in the left section supports:
 
 - **Real-time Population:** Playlists immediately appear when selected in main table
-- **Track Selection:** Select All checkbox in header + individual track checkboxes (NEW - similar to main table)
-- **Expandable Rows:** Click a row to show detailed breakdown
-- **Detail View shows:**
-  - Matched songs list
-  - Unmatched songs list (clickable to show in right panel)
-  - Export progress per playlist
+- **Playlist Checkboxes:** Select All checkbox in header + individual playlist checkboxes to control which tracks display in right panel
 - **Status column:** Shows `Exported` / `Exporting` / `Pending`
 - **Progress bar:** Visual progress indicator during export
 - **Aggregate statistics:** Shown as inline badges in panel header (Total, Matched, Unmatched)
-- **Removed:** "Match/Unmatch" column from table (aggregate stats now in header)
 
-### 2.5 Songs Detail Panel 📋 TO BE IMPLEMENTED
+**Checkbox Behavior:**
+- Checkboxes control which playlists' tracks are displayed in the right Songs panel
+- Check a playlist → its tracks appear in right panel
+- Check multiple playlists → all their tracks appear in right panel (grouped by playlist)
+- Uncheck a playlist → its tracks disappear from right panel
+- Select All → shows all tracks from all selected playlists
+- Independent from row click (clicking row still shows playlist details)
+
+### 2.5 Songs Detail Panel 📋 TO BE IMPLEMENTED (Updated January 16, 2026)
 
 **Location:** Right section (Before/During Export)
 
-**Panel Change:** The "Unmatched Songs" panel is now renamed to "Songs" and shows all tracks from the selected playlist, not just unmatched songs.
+**Panel Change:** The "Unmatched Songs" panel is now renamed to "Songs" and shows all tracks from checked playlists in the Selected Playlists table (left panel).
+
+**Display Behavior:**
+- Shows tracks from **checked playlists** in the Selected Playlists table (left panel)
+- Tracks are **grouped by playlist** with visual separators
+- Each playlist group has a section header showing playlist name and track count
+- Row numbering **resets to 1** for each new playlist group
+- Empty state when no playlists are checked
 
 **Columns:**
 | Column | Width | Content |
 |--------|-------|---------|
-| Title | 45% | Song title (truncated) |
-| Album | 25% | Album name (truncated) |
-| Artist | 25% | Artist name (truncated) |
-| Duration | 5% | Track duration (mm:ss) |
+| # | 5% | Row number (resets to 1 for each playlist group) |
+| Title | 40% | Song title (truncated with tooltip) |
+| Album | 25% | Album name (truncated with tooltip) |
+| Artist | 20% | Artist name (truncated with tooltip) |
+| Duration | 10% | Track duration (mm:ss) |
 
-**Behavior:**
-- Shows all tracks from selected playlist when user clicks a playlist in the Selected Playlists table
-- Empty state when no playlist selected
+**Visual Grouping:**
+- **Section Headers:** Each checked playlist gets a visual separator/header row
+- **Header Content:** Playlist name + track count (e.g., "💿 Liked Songs (150 tracks)")
+- **Header Styling:** Distinct background color, bold text, border-top for clear separation
+- **Track Grouping:** All tracks from one playlist appear together under its header
+- **Order:** Playlists appear in the order they were checked
+
+**Example Display:**
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+💿 Liked Songs (150 tracks)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# | Title          | Album        | Artist      | Duration
+1 | Song 1         | Album A      | Artist X    | 3:45
+2 | Song 2         | Album B      | Artist Y    | 4:12
+3 | Song 3         | Album C      | Artist Z    | 2:58
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+💿 Playlist A (42 tracks)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# | Title          | Album        | Artist      | Duration
+1 | Song 4         | Album D      | Artist A    | 3:22
+2 | Song 5         | Album E      | Artist B    | 5:01
+3 | Song 6         | Album F      | Artist C    | 3:33
+```
+
+**Interaction:**
 - **No Track Selection:** Songs panel is read-only - only displays track information
 - **Display Only:** Users can view all tracks but cannot select individual tracks in this panel
 - **Visual Indicators:** Hover effects for better interactivity but no selection states
 
 **Display Features:**
-- **Complete Track List:** Shows all tracks from the selected playlist in a scrollable table
+- **Complete Track List:** Shows all tracks from all checked playlists
 - **Hover Effects:** Visual feedback on hover for better user experience
 - **Tooltips:** Full content displayed on hover for truncated text
 - **Responsive Scrolling:** Independent scrolling with sticky header
 - **Information Focus:** Designed for viewing track details, not selection
+- **Section Headers:** Non-interactive visual separators (not clickable rows)
 
 **Future Enhancement:** 📋 TO BE IMPLEMENTED
 - Click a song row for additional options (e.g., "Skip", "Match manually")
@@ -516,36 +551,54 @@ The separate Statistics Panel has been removed. Statistics are now displayed as 
 - Handles both Liked Songs and regular playlists
 - Approximately 40 lines of minimal code added
 
-### 2.5.2 Songs Panel Display (Read-Only) 📋 TO BE IMPLEMENTED
+### 2.5.2 Songs Panel Display with Playlist Grouping 📋 TO BE IMPLEMENTED (Updated January 16, 2026)
 
-**Current Behavior:** Unmatched Songs panel shows only unmatched tracks from selected playlist.
+**Current Behavior:** Unmatched Songs panel shows only unmatched tracks from a single selected playlist.
 
-**Required Behavior:** Songs panel shows all tracks from selected playlist as a read-only display.
+**Required Behavior:** Songs panel shows all tracks from all checked playlists in the Selected Playlists table, grouped by playlist with visual separators.
 
 **Implementation Details:**
 - **Panel Rename:** Change "Unmatched Songs Panel" to "Songs Panel"
-- **Complete Track List:** Display all tracks from selected playlist, not just unmatched ones
+- **Data Source:** Fetch all tracks from checked playlists (not just one playlist, not just unmatched)
+- **Checkbox Control:** Right panel updates when checkboxes change in left panel
+- **Visual Grouping:** Add section headers between playlist groups
+- **Row Numbering:** Reset to 1 for each new playlist group (not continuous)
 - **Read-Only Display:** No selection checkboxes - purely for viewing track information
-- **Table Structure:** Remove Select column - only display track information
-- **Behavior Changes:**
-  - Empty state when no playlist selected
-  - Hover effects for better interactivity
-  - Tooltips for truncated text
-  - Independent scrolling with sticky header
+- **Table Structure:** Add # column for row numbers (resets per playlist), adjust other column widths
+
+**Behavior Changes:**
+- Empty state when no playlists are checked in left panel
+- Show tracks from single playlist when one is checked
+- Show tracks from multiple playlists (grouped) when multiple are checked
+- Update immediately when checkboxes change
+- Maintain scroll position when possible
 
 **Component Updates Required:**
 - Rename `UnmatchedSongsPanel.tsx` to `SongsPanel.tsx`
 - Remove any selection-related code from track table
-- Update to fetch and display all tracks from selected playlist
+- Add section header rendering between playlist groups
+- Update to fetch and display all tracks from checked playlists
+- Add # column for sequential row numbering
 - Ensure proper scrolling and sticky header behavior
 - Add hover effects and tooltips for better UX
 
+**Section Header Component:**
+```tsx
+<div className="bg-zinc-100 dark:bg-zinc-800 px-4 py-2 font-semibold text-sm border-t-2 border-zinc-300 dark:border-zinc-700 flex items-center gap-2">
+  <span>💿</span>
+  <span>{playlistName}</span>
+  <span className="text-zinc-500 dark:text-zinc-400 font-normal">({trackCount} tracks)</span>
+</div>
+```
+
 **UI Requirements:**
-- Clean, readable display of track information
+- Clean, readable display of track information grouped by playlist
+- Clear visual separation between playlist sections
 - Hover effects for interactivity without selection
 - Tooltips for truncated track titles/albums/artists
-- Responsive column widths (no Select column)
-- Proper scrollable container with sticky header
+- Responsive column widths with # column added
+- Proper scrollable container with sticky table header
+- Section headers scroll with content (not sticky)
 
 ---
 
