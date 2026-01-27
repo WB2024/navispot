@@ -287,30 +287,40 @@ export function PlaylistTable({
 
   return (
     <div className="w-full flex flex-col h-full overflow-hidden">
-      <div className="relative mb-4 flex-shrink-0">
-        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-          <svg className="h-5 w-5 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-        </div>
-        <input
-          type="text"
-          placeholder="Search playlists..."
-          value={searchQuery}
-          onChange={(e) => onSearchChange(e.target.value)}
-          disabled={isExporting}
-          className="pl-10 pr-10 py-2 w-full max-w-md rounded-lg border border-zinc-200 bg-white text-sm text-zinc-900 placeholder-zinc-400 focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder-zinc-500 dark:focus:border-green-500 dark:focus:ring-green-500 disabled:cursor-not-allowed disabled:opacity-50"
-        />
-        {searchQuery && (
-          <button
-            onClick={() => onSearchChange('')}
-            className="absolute inset-y-0 right-0 pr-3 flex items-center"
-          >
-            <svg className="h-5 w-5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+      <div className="mb-4 flex justify-between items-center flex-shrink-0">
+        <div className="relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <svg className="h-5 w-5 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
-          </button>
-        )}
+          </div>
+          <input
+            type="text"
+            placeholder="Search playlists..."
+            value={searchQuery}
+            onChange={(e) => onSearchChange(e.target.value)}
+            disabled={isExporting}
+            className="pl-10 pr-10 py-2 w-full max-w-md rounded-lg border border-zinc-200 bg-white text-sm text-zinc-900 placeholder-zinc-400 focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder-zinc-500 dark:focus:border-green-500 dark:focus:ring-green-500 disabled:cursor-not-allowed disabled:opacity-50"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => onSearchChange('')}
+              className="absolute inset-y-0 right-0 pr-3 flex items-center z-10"
+            >
+              <svg className="h-5 w-5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+        <div className="text-sm text-zinc-500 dark:text-zinc-400">
+          Showing {filteredItems.length} of {allItems.length} playlists
+          {selectedIds.size > 0 && !isExporting && (
+            <span className="ml-2 text-green-600 dark:text-green-400 font-medium">
+              ({selectedIds.size} selected)
+            </span>
+          )}
+        </div>
       </div>
 
       <div className={`rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden flex-1 transition-all ${
@@ -429,15 +439,6 @@ export function PlaylistTable({
             </tbody>
           </table>
         </div>
-      </div>
-
-      <div className="mt-2 text-sm text-zinc-500 dark:text-zinc-400 text-right flex-shrink-0">
-        Showing {filteredItems.length} of {allItems.length} playlists
-        {selectedIds.size > 0 && !isExporting && (
-          <span className="ml-2 text-green-600 dark:text-green-400 font-medium">
-            ({selectedIds.size} selected)
-          </span>
-        )}
       </div>
     </div>
   );
