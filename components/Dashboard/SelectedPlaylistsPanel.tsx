@@ -1,47 +1,47 @@
-'use client';
+"use client"
 
-import { useState } from 'react';
+import { useState } from "react"
 
 export interface SelectedPlaylist {
-  id: string;
-  name: string;
-  matched: number;
-  unmatched: number;
-  exported: number;
-  failed: number;
-  total: number;
-  status: 'exported' | 'exporting' | 'pending';
-  progress: number;
-  isCurrent?: boolean;
+  id: string
+  name: string
+  matched: number
+  unmatched: number
+  exported: number
+  failed: number
+  total: number
+  status: "exported" | "exporting" | "pending"
+  progress: number
+  isCurrent?: boolean
 }
 
 interface SelectedPlaylistsPanelProps {
-  selectedPlaylists: SelectedPlaylist[];
-  onPlaylistClick: (id: string) => void;
-  currentPlaylistId: string | null;
-  isExporting: boolean;
-  checkedPlaylistIds: Set<string>;
-  onToggleCheck: (id: string) => void;
-  onToggleCheckAll: () => void;
+  selectedPlaylists: SelectedPlaylist[]
+  onPlaylistClick: (id: string) => void
+  currentPlaylistId: string | null
+  isExporting: boolean
+  checkedPlaylistIds: Set<string>
+  onToggleCheck: (id: string) => void
+  onToggleCheckAll: () => void
   statistics?: {
-    matched: number;
-    unmatched: number;
-    total: number;
-    failed?: number;
-  };
+    matched: number
+    unmatched: number
+    total: number
+    failed?: number
+  }
 }
 
 const statusColors = {
-  exported: 'bg-green-100 text-green-800 border-green-200',
-  exporting: 'bg-blue-100 text-blue-800 border-blue-200',
-  pending: 'bg-zinc-100 text-zinc-600 border-zinc-200',
-};
+  exported: "bg-green-100 text-green-800 border-green-200",
+  exporting: "bg-blue-100 text-blue-800 border-blue-200",
+  pending: "bg-zinc-100 text-zinc-600 border-zinc-200",
+}
 
 const statusLabels = {
-  exported: 'Exported',
-  exporting: 'Exporting',
-  pending: 'Pending',
-};
+  exported: "Exported",
+  exporting: "Exporting",
+  pending: "Pending",
+}
 
 export function SelectedPlaylistsPanel({
   selectedPlaylists,
@@ -53,21 +53,23 @@ export function SelectedPlaylistsPanel({
   onToggleCheckAll,
   statistics,
 }: SelectedPlaylistsPanelProps) {
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
 
-  const allChecked = selectedPlaylists.length > 0 && selectedPlaylists.every(p => checkedPlaylistIds.has(p.id));
+  const allChecked =
+    selectedPlaylists.length > 0 &&
+    selectedPlaylists.every((p) => checkedPlaylistIds.has(p.id))
 
   const toggleRow = (id: string) => {
     setExpandedRows((prev) => {
-      const newSet = new Set(prev);
+      const newSet = new Set(prev)
       if (newSet.has(id)) {
-        newSet.delete(id);
+        newSet.delete(id)
       } else {
-        newSet.add(id);
+        newSet.add(id)
       }
-      return newSet;
-    });
-  };
+      return newSet
+    })
+  }
 
   return (
     <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden flex flex-col h-full">
@@ -78,20 +80,50 @@ export function SelectedPlaylistsPanel({
         {statistics && (
           <div className="flex items-center gap-3">
             <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              <svg
+                className="w-3.5 h-3.5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 6h16M4 12h16M4 18h16"
+                />
               </svg>
               {statistics.total}
             </span>
             <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              <svg
+                className="w-3.5 h-3.5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M5 13l4 4L19 7"
+                />
               </svg>
               {statistics.matched}
             </span>
             <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              <svg
+                className="w-3.5 h-3.5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
               </svg>
               {statistics.unmatched}
             </span>
@@ -100,7 +132,7 @@ export function SelectedPlaylistsPanel({
       </div>
       <div className="overflow-auto flex-1">
         <table className="w-full">
-          <thead className="bg-zinc-50 dark:bg-zinc-800/50 sticky top-0">
+          <thead className="bg-zinc-50 dark:bg-zinc-800/95 sticky top-0">
             <tr className="border-b border-zinc-200 dark:border-zinc-800">
               <th className="w-12 px-4 py-2">
                 <input
@@ -128,12 +160,17 @@ export function SelectedPlaylistsPanel({
                 onClick={() => onToggleCheck(playlist.id)}
                 className={`
                   cursor-pointer transition-colors
-                  ${checkedPlaylistIds.has(playlist.id)
-                    ? 'bg-zinc-100 dark:bg-zinc-800 border-l-4 border-l-green-500'
-                    : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/50'}
+                  ${
+                    checkedPlaylistIds.has(playlist.id)
+                      ? "bg-zinc-100 dark:bg-zinc-800 border-l-4 border-l-green-500"
+                      : "hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
+                  }
                 `}
               >
-                <td className="w-12 px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                <td
+                  className="w-12 px-4 py-3"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <input
                     type="checkbox"
                     checked={checkedPlaylistIds.has(playlist.id)}
@@ -141,14 +178,16 @@ export function SelectedPlaylistsPanel({
                     className="rounded border-zinc-300 dark:border-zinc-600"
                   />
                 </td>
-                <td 
-                  className="px-4 py-3 text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate max-w-[200px]" 
+                <td
+                  className="px-4 py-3 text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate max-w-[200px]"
                   title={playlist.name}
                 >
                   {playlist.name}
                 </td>
                 <td className="px-4 py-3">
-                  <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium border ${statusColors[playlist.status]}`}>
+                  <span
+                    className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium border ${statusColors[playlist.status]}`}
+                  >
                     {statusLabels[playlist.status]}
                   </span>
                 </td>
@@ -160,11 +199,11 @@ export function SelectedPlaylistsPanel({
                     <div className="h-2 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
                       <div
                         className={`h-full transition-all duration-300 ${
-                          playlist.status === 'exported' 
-                            ? 'bg-green-500' 
-                            : playlist.status === 'exporting'
-                            ? 'bg-blue-500'
-                            : 'bg-zinc-300 dark:bg-zinc-700'
+                          playlist.status === "exported"
+                            ? "bg-green-500"
+                            : playlist.status === "exporting"
+                              ? "bg-blue-500"
+                              : "bg-zinc-300 dark:bg-zinc-700"
                         }`}
                         style={{ width: `${playlist.progress}%` }}
                       />
@@ -175,8 +214,12 @@ export function SelectedPlaylistsPanel({
             ))}
             {selectedPlaylists.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">
-                  No playlists selected. Select playlists from the table below to export.
+                <td
+                  colSpan={4}
+                  className="px-4 py-8 text-center text-sm text-zinc-500 dark:text-zinc-400"
+                >
+                  No playlists selected. Select playlists from the table below
+                  to export.
                 </td>
               </tr>
             )}
@@ -184,5 +227,5 @@ export function SelectedPlaylistsPanel({
         </table>
       </div>
     </div>
-  );
+  )
 }

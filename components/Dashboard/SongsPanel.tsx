@@ -1,29 +1,32 @@
-'use client';
+"use client"
 
-import React from 'react';
+import React from "react"
 
 export interface Song {
-  spotifyTrackId: string;
-  title: string;
-  album: string;
-  artist: string;
-  duration: string;
-  exportStatus?: 'waiting' | 'exported' | 'failed';
+  spotifyTrackId: string
+  title: string
+  album: string
+  artist: string
+  duration: string
+  exportStatus?: "waiting" | "exported" | "failed"
 }
 
 export interface PlaylistGroup {
-  playlistId: string;
-  playlistName: string;
-  songs: Song[];
-  isLoading?: boolean;
+  playlistId: string
+  playlistName: string
+  songs: Song[]
+  isLoading?: boolean
 }
 
 interface SongsPanelProps {
-  playlistGroups: PlaylistGroup[];
-  isLoading?: boolean;
+  playlistGroups: PlaylistGroup[]
+  isLoading?: boolean
 }
 
-export function SongsPanel({ playlistGroups, isLoading = false }: SongsPanelProps) {
+export function SongsPanel({
+  playlistGroups,
+  isLoading = false,
+}: SongsPanelProps) {
   if (playlistGroups.length === 0) {
     return (
       <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden flex flex-col h-full">
@@ -68,7 +71,7 @@ export function SongsPanel({ playlistGroups, isLoading = false }: SongsPanelProp
           )}
         </div>
       </div>
-    );
+    )
   }
 
   return (
@@ -80,7 +83,7 @@ export function SongsPanel({ playlistGroups, isLoading = false }: SongsPanelProp
       </div>
       <div className="overflow-auto flex-1">
         <table className="w-full">
-          <thead className="bg-zinc-50 dark:bg-zinc-800/50 sticky top-0">
+          <thead className="bg-zinc-50 dark:bg-zinc-800/95 sticky top-0">
             <tr className="border-b border-zinc-200 dark:border-zinc-800">
               <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400 w-[5%]">
                 #
@@ -104,9 +107,16 @@ export function SongsPanel({ playlistGroups, isLoading = false }: SongsPanelProp
               <React.Fragment key={group.playlistId}>
                 {/* Section Header */}
                 <tr>
-                  <td colSpan={5} className="bg-zinc-100 dark:bg-zinc-800 px-4 py-2 font-semibold text-sm border-t-2 border-zinc-300 dark:border-zinc-700">
+                  <td
+                    colSpan={5}
+                    className="bg-zinc-100 dark:bg-zinc-800 px-4 py-2 font-semibold text-sm border-t-2 border-zinc-300 dark:border-zinc-700"
+                  >
                     <div className="flex items-center gap-2">
-                      <span className={group.isLoading ? 'animate-spin inline-block' : ''}>
+                      <span
+                        className={
+                          group.isLoading ? "animate-spin inline-block" : ""
+                        }
+                      >
                         💿
                       </span>
                       <span>{group.playlistName}</span>
@@ -126,23 +136,32 @@ export function SongsPanel({ playlistGroups, isLoading = false }: SongsPanelProp
                   <tr
                     key={`${group.playlistId}-${index}`}
                     className={`hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors border-b border-zinc-200 dark:border-zinc-800 ${
-                      song.exportStatus === 'exported'
-                        ? 'bg-green-50 dark:bg-green-900/20'
-                        : song.exportStatus === 'failed'
-                        ? 'bg-red-50 dark:bg-red-900/20'
-                        : ''
+                      song.exportStatus === "exported"
+                        ? "bg-green-50 dark:bg-green-900/20"
+                        : song.exportStatus === "failed"
+                          ? "bg-red-50 dark:bg-red-900/20"
+                          : ""
                     }`}
                   >
                     <td className="px-4 py-2 text-sm text-zinc-500 dark:text-zinc-400">
                       {index + 1}
                     </td>
-                    <td className="px-4 py-2 text-sm text-zinc-900 dark:text-zinc-100 truncate max-w-[200px]" title={song.title}>
+                    <td
+                      className="px-4 py-2 text-sm text-zinc-900 dark:text-zinc-100 truncate max-w-[200px]"
+                      title={song.title}
+                    >
                       {song.title}
                     </td>
-                    <td className="px-4 py-2 text-sm text-zinc-600 dark:text-zinc-400 truncate max-w-[120px]" title={song.album}>
+                    <td
+                      className="px-4 py-2 text-sm text-zinc-600 dark:text-zinc-400 truncate max-w-[120px]"
+                      title={song.album}
+                    >
                       {song.album}
                     </td>
-                    <td className="px-4 py-2 text-sm text-zinc-600 dark:text-zinc-400 truncate max-w-[120px]" title={song.artist}>
+                    <td
+                      className="px-4 py-2 text-sm text-zinc-600 dark:text-zinc-400 truncate max-w-[120px]"
+                      title={song.artist}
+                    >
                       {song.artist}
                     </td>
                     <td className="px-4 py-2 text-sm text-zinc-500 dark:text-zinc-400">
@@ -156,5 +175,5 @@ export function SongsPanel({ playlistGroups, isLoading = false }: SongsPanelProp
         </table>
       </div>
     </div>
-  );
+  )
 }
