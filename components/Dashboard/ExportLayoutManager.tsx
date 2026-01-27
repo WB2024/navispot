@@ -17,9 +17,9 @@ export function ExportLayoutManager({
     <div className="relative">
       {fixedExportButton}
 
-      <div className="flex flex-col h-[calc(100vh-64px)]">
-        {/* Top Section - 50% height - Consistent across all stages */}
-        <div className="h-[50%] flex gap-4 overflow-hidden">
+      <div className="flex flex-col h-[calc(100vh-120px)] pb-16">
+        {/* Top Section - 40% height - Consistent across all stages */}
+        <div className="h-[40%] flex gap-4 overflow-hidden">
           {/* Left Column - Selected Playlists (50% width) */}
           <div className="w-1/2 flex flex-col overflow-hidden">
             {selectedPlaylistsSection}
@@ -31,8 +31,8 @@ export function ExportLayoutManager({
           </div>
         </div>
 
-        {/* Bottom Section - 50% height - Main Playlist Table */}
-        <div className="h-[50%] border-t border-zinc-200 dark:border-zinc-800 overflow-hidden pt-4">
+        {/* Bottom Section - 60% height - Main Playlist Table */}
+        <div className="h-[60%] overflow-hidden pt-4">
           {mainTableSection}
         </div>
       </div>
