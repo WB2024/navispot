@@ -328,7 +328,7 @@ export function PlaylistTable({
       }`}>
         <div className="overflow-auto h-full">
           <table className="w-full divide-y divide-zinc-200 dark:divide-zinc-800">
-            <thead className="sticky top-0 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-sm z-10">
+            <thead className="sticky top-0 bg-white/100 dark:bg-zinc-900/100 backdrop-blur-sm z-10">
               <tr className="border-b border-zinc-200 dark:border-zinc-800">
                 <th className="px-4 py-3 text-left w-[60px]">
                   <div className="relative">
