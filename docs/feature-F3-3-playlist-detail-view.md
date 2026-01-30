@@ -7,6 +7,8 @@ Displays detailed information about a selected playlist, including a list of tra
 - Track list with columns: title, artist, album
 - Match status column (color-coded)
 - Matched/unmatched counts summary
+- Filter for unmatched songs (checkbox)
+- Download unmatched songs as JSON
 
 ## Dependencies
 - F2.7 Batch Matcher
@@ -60,6 +62,16 @@ Summary component displaying:
 ### MatchStatusBadge
 Visual indicator for match status with tooltip showing details.
 
+### UnmatchedSongsFilter
+Checkbox filter in the Songs panel header that displays only unmatched songs (exportStatus === "failed").
+
+### UnmatchedSongsDownload
+Download button in the Songs panel header that exports unmatched songs as JSON file containing:
+- title
+- artist
+- album
+- duration
+
 ## Implementation Details
 
 ### Track Duration Formatting
@@ -80,12 +92,38 @@ Show strategy used for matched tracks:
 - Use horizontal scroll for track table on mobile
 - Stack statistics cards on mobile
 
+### Unmatched Songs Filter
+- Checkbox located in Songs panel header (far right of "Songs" title)
+- When checked, filters to show only tracks where `exportStatus === "failed"`
+- Filter is applied at playlist group level to maintain playlist organization
+- Uses React's `useMemo` for efficient re-rendering
+- Empty state properly handled when no unmatched songs exist
+
+### Unmatched Songs Download
+- Download button located next to checkbox in Songs panel header
+- Exports all unmatched songs across all playlists as JSON
+- JSON file structure:
+  ```json
+  [
+    {
+      "title": "Song Title",
+      "artist": "Artist Name",
+      "album": "Album Name",
+      "duration": "3:45"
+    }
+  ]
+  ```
+- Filename format: `unmatched-songs-YYYY-MM-DD.json`
+- Shows browser alert if no unmatched songs available
+- Uses Blob API for client-side file generation
+
 ## Files Modified
 - `app/playlist/[id]/page.tsx` - Playlist detail page
 - `app/components/PlaylistDetail.tsx` - Main component
 - `app/components/TrackList.tsx` - Track table component
 - `app/components/MatchStatistics.tsx` - Statistics summary
 - `app/components/MatchStatusBadge.tsx` - Status indicator
+- `components/Dashboard/SongsPanel.tsx` - Songs panel with filter and download
 - `types/index.ts` - Extended types if needed
 
 ## Testing
@@ -94,10 +132,17 @@ Show strategy used for matched tracks:
 - Validate summary statistics calculations
 - Test responsive behavior
 - Verify tooltip functionality
+- Verify unmatched songs checkbox toggles correctly
+- Confirm filter shows only tracks with `exportStatus === "failed"`
+- Test download button generates valid JSON file
+- Verify JSON contains required fields (title, artist, album, duration)
+- Test empty state when no unmatched songs exist
+- Verify alert message displays when downloading with no unmatched songs
 
 ## Future Enhancements
 - Sortable columns
-- Filter by match status
 - Search within track list
 - Pagination for large playlists
 - Inline candidate selection for ambiguous matches
+- Export unmatched songs in JSON format
+- Allow custom filename for download

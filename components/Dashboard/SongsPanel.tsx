@@ -1,6 +1,6 @@
 "use client"
 
-import React from "react"
+import React, { useState, useMemo } from "react"
 
 export interface Song {
   spotifyTrackId: string
@@ -27,7 +27,59 @@ export function SongsPanel({
   playlistGroups,
   isLoading = false,
 }: SongsPanelProps) {
-  if (playlistGroups.length === 0) {
+  const [showUnmatchedOnly, setShowUnmatchedOnly] = useState(false)
+
+  const filteredGroups = useMemo(() => {
+    if (!showUnmatchedOnly) {
+      return playlistGroups
+    }
+
+    return playlistGroups.map((group) => ({
+      ...group,
+      songs: group.songs.filter(
+        (song) => song.exportStatus === "failed"
+      ),
+    }))
+  }, [playlistGroups, showUnmatchedOnly])
+
+  const handleDownloadUnmatched = () => {
+    const unmatchedSongs: Array<{
+      title: string
+      artist: string
+      album: string
+      duration: string
+    }> = []
+
+    playlistGroups.forEach((group) => {
+      group.songs.forEach((song) => {
+        if (song.exportStatus === "failed") {
+          unmatchedSongs.push({
+            title: song.title,
+            artist: song.artist,
+            album: song.album,
+            duration: song.duration,
+          })
+        }
+      })
+    })
+
+    if (unmatchedSongs.length === 0) {
+      alert("No unmatched songs to download")
+      return
+    }
+
+    const jsonString = JSON.stringify(unmatchedSongs, null, 2)
+    const blob = new Blob([jsonString], { type: "application/json" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = `unmatched-songs-${new Date().toISOString().split("T")[0]}.json`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+  if (filteredGroups.length === 0) {
     return (
       <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden flex flex-col h-full">
         <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 flex-shrink-0">
@@ -77,9 +129,44 @@ export function SongsPanel({
   return (
     <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden flex flex-col h-full">
       <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 flex-shrink-0">
-        <h2 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-          Songs
-        </h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+            Songs
+          </h2>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showUnmatchedOnly}
+                onChange={(e) => setShowUnmatchedOnly(e.target.checked)}
+                className="rounded border-zinc-300 dark:border-zinc-600 text-blue-500 focus:ring-blue-500 dark:bg-zinc-700"
+              />
+              <span className="text-xs text-zinc-600 dark:text-zinc-400">
+                Unmatched Songs
+              </span>
+            </label>
+            <button
+              onClick={handleDownloadUnmatched}
+              className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
+              title="Download unmatched songs as JSON"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                />
+              </svg>
+              Download
+            </button>
+          </div>
+        </div>
       </div>
       <div className="overflow-auto flex-1">
         <table className="w-full">
@@ -103,7 +190,7 @@ export function SongsPanel({
             </tr>
           </thead>
           <tbody>
-            {playlistGroups.map((group) => (
+            {filteredGroups.map((group) => (
               <React.Fragment key={group.playlistId}>
                 {/* Section Header */}
                 <tr>

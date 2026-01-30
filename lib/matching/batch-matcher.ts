@@ -232,7 +232,7 @@ export class DefaultBatchMatcher implements BatchMatcher {
     });
 
     const concurrency = matcherOptions.concurrency ?? 1;
-    let newMatches: TrackMatch[] = [];
+    const newMatches: TrackMatch[] = [];
 
     const checkAbort = () => {
       if (signal?.aborted) {
