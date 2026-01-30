@@ -604,17 +604,40 @@ const handleRefreshPlaylists = async () => {
   try {
     spotifyClient.setToken(spotify.token)
 
-    // Refetch playlists from Spotify
-    const fetchedPlaylists = await spotifyClient.getAllPlaylists()
+    // Refetch playlists from Spotify with cache-busting
+    const fetchedPlaylists = await spotifyClient.getAllPlaylists(undefined, true)
     setPlaylists(fetchedPlaylists)
 
-    // Update liked songs count
+    // Update liked songs count with cache-busting
     try {
-      const count = await spotifyClient.getSavedTracksCount()
+      const count = await spotifyClient.getSavedTracksCount(undefined, true)
       setLikedSongsCount(count)
     } catch {
       setLikedSongsCount(0)
     }
+
+    // Refresh Navidrome playlists if connected
+    if (navidrome.isConnected && navidrome.credentials && navidrome.token && navidrome.clientId) {
+      const navidromeClient = new NavidromeApiClient(
+        navidrome.credentials.url,
+        navidrome.credentials.username,
+        navidrome.credentials.password,
+        navidrome.token,
+        navidrome.clientId
+      )
+      try {
+        const navPlaylists = await navidromeClient.getPlaylists()
+        setNavidromePlaylists(navPlaylists)
+      } catch (navErr) {
+        console.warn("Failed to fetch Navidrome playlists:", navErr)
+      }
+    }
+  } catch (err) {
+    setError(err instanceof Error ? err.message : "Failed to refresh playlists")
+  } finally {
+    setRefreshing(false)
+  }
+}
 
     // Refresh Navidrome playlists if connected
     if (navidrome.isConnected && navidrome.credentials && navidrome.token && navidrome.clientId) {
@@ -660,11 +683,25 @@ const handleRefreshPlaylists = async () => {
 - [x] Button is disabled during initial load
 - [x] No page refresh occurs
 
-### Bug Fix During Testing
+### Bug Fixes During Testing
 
-**Issue:** The refresh button was not being disabled during initial load.
+**Issue 1:** The refresh button was not being disabled during initial load.
 
 **Fix:** Added `loading` prop to PlaylistTable and updated the button's disabled condition to: `disabled={loading || isRefreshing || isExporting}`
+
+**Issue 2:** Browser was using cached responses when refreshing playlists, preventing users from seeing updated playlist data.
+
+**Fix:** Added cache-busting to prevent browser caching:
+- Modified `lib/spotify/client.ts` to accept `bypassCache` parameter
+- Added timestamp query parameter (`_t=${Date.now()}`) to request URLs
+- Updated `handleRefreshPlaylists` in Dashboard to pass `bypassCache: true` to Spotify API calls
+- This makes each request URL unique, forcing the browser to fetch fresh data
+
+**Implementation Details:**
+- `getPlaylists()`, `getSavedTracks()`, and `getSavedTracksCount()` now accept `bypassCache` parameter
+- When `bypassCache=true`, a unique timestamp is appended to the URL
+- Browser treats each unique URL as a separate request, bypassing its cache
+- No custom headers are added to avoid CORS issues (Spotify API doesn't support Cache-Control header in requests)
 
 ### Benefits
 
