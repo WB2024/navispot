@@ -1052,7 +1052,8 @@ export function Dashboard() {
             setTimeout(() => {
               setShowSuccess(false)
             }, 5000)
-            handleCancelExport()
+            isExportingRef.current = false
+            setIsExporting(false)
           }
         } else {
           const exporterOptions: PlaylistExporterOptions = {
