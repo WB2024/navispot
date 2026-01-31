@@ -128,7 +128,6 @@ export class SpotifyClient {
 
       this.setToken(newToken);
       
-      // Update shared storage for AuthContext
       const stored = localStorage.getItem(SPOTIFY_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);

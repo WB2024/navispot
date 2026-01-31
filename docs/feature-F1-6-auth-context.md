@@ -376,3 +376,99 @@ if (parsed.token) {
 - Network error during refresh → User logged out (fallback to safe state)
 - Missing refresh token → User logged out (invalid token state)
 - Refresh endpoint unavailable → User logged out (fallback to safe state)
+
+### January 31, 2026 - Token Storage Consolidation and Navidrome Connection Fix
+
+**Issue 1: Dual Token Storage Causing Refresh Denials**
+
+**Problem:**
+Spotify tokens were stored in two separate locations:
+- `'spotify_token'` (encrypted storage via `SpotifyClient.persistToken()`)
+- `'navispot_spotify_auth'` (unencrypted via AuthContext)
+
+When `SpotifyClient.refreshAccessToken()` refreshed a token:
+1. New token was saved to `'spotify_token'` (encrypted)
+2. `'navispot_spotify_auth'` remained with the old expired token
+3. Subsequent API calls read stale token from `'navispot_spotify_auth'`
+4. Multiple concurrent refresh attempts sent same refresh token to Spotify
+5. Spotify denied subsequent refresh requests (refresh token already used)
+
+**Fix:**
+- Removed encrypted `'spotify_token'` storage entirely
+- Use only `'navispot_spotify_auth'` as single source of truth
+- `SpotifyClient.refreshAccessToken()` now updates shared storage directly
+- Removed `persistToken()` and `loadToken()` from `SpotifyClient`
+- Added `loadTokenFromStorage()` to read from shared storage
+
+**Code Changes:**
+```typescript
+// lib/spotify/client.ts - refreshAccessToken now updates shared storage
+async refreshAccessToken(): Promise<SpotifyToken | null> {
+  // ... refresh logic ...
+  this.setToken(newToken);
+  
+  // Update shared storage for AuthContext
+  const stored = localStorage.getItem(SPOTIFY_STORAGE_KEY);
+  if (stored) {
+    const parsed = JSON.parse(stored);
+    parsed.token = newToken;
+    localStorage.setItem(SPOTIFY_STORAGE_KEY, JSON.stringify(parsed));
+  }
+  
+  return newToken;
+}
+```
+
+**Benefits:**
+- Single source of truth prevents sync issues
+- No more "refresh token already used" errors
+- All code paths read from same storage location
+
+---
+
+**Issue 2: loadStoredAuth Early Return Skipping Navidrome**
+
+**Problem:**
+In `loadStoredAuth()`, when Spotify token refresh succeeded, the function returned early:
+
+```typescript
+if (refreshed) {
+  return; // Exits, skipping Navidrome section!
+}
+```
+
+This caused inconsistent authentication behavior:
+- **Scenario A:** Spotify refresh succeeds → Navidrome never connects
+- **Scenario B:** Spotify refresh fails → Code continues → Navidrome connects
+- Users experienced different authentication states based on token expiry timing
+
+**Fix:**
+Replaced early return with flag-based flow to ensure both authentication paths execute:
+
+```typescript
+// Old behavior:
+const refreshed = await refreshSpotifyTokenFromStorage(parsed.token, parsed.user);
+if (refreshed) {
+  return; // Early exit skips Navidrome!
+}
+
+// New behavior:
+let spotifySuccess = false;
+const refreshed = await refreshSpotifyTokenFromStorage(parsed.token, parsed.user);
+if (refreshed) {
+  spotifySuccess = true;
+} else {
+  localStorage.removeItem(SPOTIFY_STORAGE_KEY);
+}
+
+// Navidrome section always runs:
+const storedNavidrome = localStorage.getItem(NAVIDROME_STORAGE_KEY);
+if (storedNavidrome) {
+  // ... Navidrome connection logic ...
+}
+```
+
+**Benefits:**
+- Both Spotify and Navidrome authentication always attempt connection
+- Independent success/failure for each service
+- Consistent authentication behavior regardless of token state
