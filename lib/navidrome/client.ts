@@ -408,8 +408,18 @@ export class NavidromeApiClient {
     const end = limit || 50;
 
     const strippedTitle = stripTitleSuffix(title);
-    let songs = await this.searchByQuery('', { title: strippedTitle, _start: 0, _end: end }, signal);
+    // Clean trailing punctuation and underscores that are unlikely to be in Navidrome's stored titles
+    const cleanedTitle = strippedTitle.replace(/[?!.,:;]+$/, '').replace(/_/g, ' ').trim();
 
+    // Primary search with cleaned title
+    let songs = await this.searchByQuery('', { title: cleanedTitle || strippedTitle, _start: 0, _end: end }, signal);
+
+    // Fallback: try with stripped but uncleaned title (in case punctuation is meaningful)
+    if (songs.length === 0 && cleanedTitle !== strippedTitle) {
+      songs = await this.searchByQuery('', { title: strippedTitle, _start: 0, _end: end }, signal);
+    }
+
+    // Fallback: try with original full title
     if (songs.length === 0 && title !== strippedTitle) {
       songs = await this.searchByQuery('', { title, _start: 0, _end: end }, signal);
     }

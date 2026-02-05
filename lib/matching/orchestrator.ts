@@ -45,6 +45,7 @@ export function convertNativeSongToNavidromeSong(nativeSong: NavidromeNativeSong
     album: nativeSong.album,
     duration: nativeSong.duration,
     isrc: nativeSong.tags?.isrc || nativeSong.isrc,
+    compilation: nativeSong.compilation,
   };
 }
 
@@ -119,6 +120,69 @@ export async function matchTrack(
         status: 'matched',
         candidates: fuzzyResult.matches.map((m) => m.song),
       };
+    }
+  }
+
+  // Fallback: search by artist when title-based search didn't produce a definitive match.
+  // This catches cases where the Navidrome title has typos or different spelling that
+  // prevents the title search from finding candidates (e.g. "How Soon Is Now" vs "How Sooon Is Now").
+  if (spotifyTrack.artists?.length > 0) {
+    try {
+      const artist = await client.getArtistByName(spotifyTrack.artists[0].name);
+      if (artist) {
+        const artistNativeSongs = await client.getAllSongsByArtist(artist.id);
+        const existingIds = new Set(candidates.map(c => c.id));
+        const artistCandidates = artistNativeSongs
+          .map(convertNativeSongToNavidromeSong)
+          .filter(c => !existingIds.has(c.id));
+
+        if (artistCandidates.length > 0) {
+          const allCandidates = [...candidates, ...artistCandidates];
+
+          // Try ISRC on expanded candidate pool
+          if (opts.enableISRC && spotifyTrack.external_ids?.isrc) {
+            const isrc = spotifyTrack.external_ids.isrc;
+            const isrcMatch = artistCandidates.find((song) => song.isrc?.[0] === isrc);
+            if (isrcMatch) {
+              return {
+                spotifyTrack,
+                navidromeSong: isrcMatch,
+                matchStrategy: 'isrc',
+                matchScore: 1,
+                status: 'matched',
+              };
+            }
+          }
+
+          // Try fuzzy on expanded candidate pool (original + artist songs)
+          if (opts.enableFuzzy) {
+            const artistFuzzyResult = findBestMatch(spotifyTrack, allCandidates, opts.fuzzyThreshold);
+            if (artistFuzzyResult.bestMatch) {
+              strategyResults.push({
+                strategy: 'fuzzy',
+                matched: true,
+                ambiguous: artistFuzzyResult.hasAmbiguous,
+                navidromeSong: artistFuzzyResult.bestMatch.song,
+                candidates: artistFuzzyResult.matches.map((m) => m.song),
+                score: artistFuzzyResult.bestMatch.score,
+              });
+
+              if (!artistFuzzyResult.hasAmbiguous) {
+                return {
+                  spotifyTrack,
+                  navidromeSong: artistFuzzyResult.bestMatch.song,
+                  matchStrategy: 'fuzzy',
+                  matchScore: artistFuzzyResult.bestMatch.score,
+                  status: 'matched',
+                  candidates: artistFuzzyResult.matches.map((m) => m.song),
+                };
+              }
+            }
+          }
+        }
+      }
+    } catch {
+      // Silently fail - artist fallback is best-effort
     }
   }
 

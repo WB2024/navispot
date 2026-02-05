@@ -136,4 +136,5 @@ export interface NavidromeSong {
   album: string;
   duration: number;
   isrc?: string[];
+  compilation?: boolean;
 }

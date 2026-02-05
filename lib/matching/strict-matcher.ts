@@ -3,10 +3,13 @@ import { TrackMatch } from '@/types/matching';
 import { NavidromeApiClient } from '@/lib/navidrome/client';
 import { NavidromeNativeSong } from '@/types/navidrome';
 import { convertNativeSongToNavidromeSong } from './orchestrator';
+import { stripTitleSuffix } from './fuzzy';
 
 export function normalizeString(str: string): string {
   return str
     .toLowerCase()
+    .replace(/\.(mp3|flac|wav|ogg|m4a|aac|wma|opus|alac|aiff?)$/i, '')
+    .replace(/_/g, ' ')
     .replace(/[^a-z0-9\s]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
@@ -19,7 +22,7 @@ export function filterStrictMatches(
 ): NavidromeNativeSong[] {
   return songs.filter((song) => {
     const songArtist = normalizeString(song.artist);
-    const songTitle = normalizeString(song.title);
+    const songTitle = normalizeString(stripTitleSuffix(song.title));
     return songArtist === normalizedArtist && songTitle === normalizedTitle;
   });
 }
@@ -31,7 +34,7 @@ export async function matchByStrict(
   const normalizedArtist = normalizeString(
     spotifyTrack.artists.map((a) => a.name).join(' ')
   );
-  const normalizedTitle = normalizeString(spotifyTrack.name);
+  const normalizedTitle = normalizeString(stripTitleSuffix(spotifyTrack.name));
 
   if (!normalizedArtist || !normalizedTitle) {
     return {

@@ -23,6 +23,8 @@ export function normalizeString(str: string): string {
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\.(mp3|flac|wav|ogg|m4a|aac|wma|opus|alac|aiff?)$/i, '')
+    .replace(/_/g, ' ')
     .replace(/[^\w\s]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
@@ -149,9 +151,16 @@ export function normalizeAlbumName(album: string): string {
 }
 
 export function normalizeTitle(title: string): string {
-  let normalized = title.toLowerCase();
+  let normalized = title;
+  // Strip file extensions (common in file-based titles from poorly tagged libraries)
+  normalized = normalized.replace(/\.(mp3|flac|wav|ogg|m4a|aac|wma|opus|alac|aiff?)$/i, '');
+  // Replace underscores with spaces
+  normalized = normalized.replace(/_/g, ' ');
+  // Strip parenthetical/dash suffixes like "- Live At...", "(Remastered)", "[Deluxe]"
+  normalized = stripTitleSuffix(normalized);
+  normalized = normalized.toLowerCase();
   for (const indicator of LIVE_INDICATORS) {
-    normalized = normalized.replace(new RegExp(indicator.replace(/[()]/g, '\\$&'), 'gi'), ' ');
+    normalized = normalized.replace(new RegExp(indicator.replace(/[()\[\]]/g, '\\$&'), 'gi'), ' ');
   }
   normalized = normalizeString(normalized);
   return normalized.replace(/\s+/g, ' ').trim();
@@ -250,6 +259,42 @@ export function calculateTrackSimilarity(
   return baseSimilarity;
 }
 
+export function getAlbumPreferenceScore(
+  spotifyTrack: import('@/types/spotify').SpotifyTrack,
+  candidate: import('@/types/navidrome').NavidromeSong
+): number {
+  let preference = 0;
+
+  // Album name similarity to Spotify album
+  const albumSim = calculateAlbumSimilarity(spotifyTrack.album.name, candidate.album);
+  preference += albumSim;
+
+  // Strong boost for near-exact album name match
+  if (albumSim > 0.8) {
+    preference += 0.3;
+  }
+
+  // Penalize compilation albums (explicit flag from Navidrome metadata)
+  if (candidate.compilation) {
+    preference -= 0.5;
+  }
+
+  // Heuristic: penalize albums that look like compilations
+  const albumLower = candidate.album.toLowerCase();
+  const compilationIndicators = ['various artists', 'various', 'v/a', 'v.a.', 'compilation', 'sampler'];
+  if (compilationIndicators.some(ind => albumLower.includes(ind))) {
+    preference -= 0.3;
+  }
+
+  // Boost if the album name contains the artist name (suggests an artist-specific release)
+  const artistName = spotifyTrack.artists[0]?.name?.toLowerCase() || '';
+  if (artistName.length > 2 && albumLower.includes(artistName)) {
+    preference += 0.2;
+  }
+
+  return preference;
+}
+
 export function findBestMatch(
   spotifyTrack: import('@/types/spotify').SpotifyTrack,
   candidates: import('@/types/navidrome').NavidromeSong[],
@@ -283,12 +328,39 @@ export function findBestMatch(
     return { matches: [], hasAmbiguous: false };
   }
 
-  const bestScore = scoredMatches[0].score;
-  const thresholdMatches = scoredMatches.filter(
-    (m) => m.score >= bestScore - 0.05
-  );
+  // Re-rank candidates that are close in score using album/compilation preference
+  if (scoredMatches.length > 1) {
+    const closeRange = 0.08;
 
-  const hasAmbiguous = thresholdMatches.length > 1;
+    scoredMatches.sort((a, b) => {
+      const scoreDiff = b.score - a.score;
+      // If scores differ significantly, keep score-based order
+      if (Math.abs(scoreDiff) > closeRange) return scoreDiff;
+
+      // For close scores, use album preference to break ties
+      const aPref = getAlbumPreferenceScore(spotifyTrack, a.song);
+      const bPref = getAlbumPreferenceScore(spotifyTrack, b.song);
+      const prefDiff = bPref - aPref;
+      if (Math.abs(prefDiff) > 0.1) return prefDiff;
+
+      // Final fallback: original score
+      return scoreDiff;
+    });
+  }
+
+  // Determine ambiguity after re-ranking
+  let hasAmbiguous = false;
+  if (scoredMatches.length > 1) {
+    const best = scoredMatches[0];
+    const secondBest = scoredMatches[1];
+    const scoreDiff = best.score - secondBest.score;
+    const bestPref = getAlbumPreferenceScore(spotifyTrack, best.song);
+    const secondPref = getAlbumPreferenceScore(spotifyTrack, secondBest.song);
+    const prefDiff = bestPref - secondPref;
+
+    // Only ambiguous if scores are close AND album preference can't distinguish them
+    hasAmbiguous = scoreDiff < 0.05 && Math.abs(prefDiff) < 0.15;
+  }
 
   return {
     matches: scoredMatches,
