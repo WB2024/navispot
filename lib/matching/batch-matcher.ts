@@ -222,9 +222,11 @@ export class DefaultBatchMatcher implements BatchMatcher {
 
     tracks.forEach(track => {
       const cachedStatus = cachedTracks[track.id];
-      if (cachedStatus) {
+      if (cachedStatus && cachedStatus.status !== 'unmatched') {
+        // Only skip re-matching for previously matched/ambiguous tracks
         tracksFromCache.push({ track, cachedStatus });
       } else {
+        // Re-match previously unmatched tracks and new tracks
         tracksToMatch.push(track);
       }
     });

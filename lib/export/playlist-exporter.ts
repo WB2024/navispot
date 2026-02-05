@@ -1,7 +1,12 @@
-import { NavidromeApiClient, parseExportMetadata } from '@/lib/navidrome/client';
+import { NavidromeApiClient } from '@/lib/navidrome/client';
 import { TrackMatch } from '@/types/matching';
 
-export type ExportMode = 'create' | 'append' | 'overwrite' | 'update';
+export type ExportMode = 'create' | 'append' | 'overwrite' | 'update' | 'sync';
+
+export interface SyncPlaylistOptions {
+  onProgress?: ProgressCallback;
+  signal?: AbortSignal;
+}
 
 interface PlaylistExportData {
   spotifyPlaylistId: string;
@@ -71,6 +76,13 @@ export interface PlaylistExporter {
     playlistName: string,
     matches: TrackMatch[],
     options?: PlaylistExporterOptions
+  ): Promise<ExportResult>;
+  syncPlaylist(
+    playlistName: string,
+    spotifyPlaylistId: string,
+    spotifySnapshotId: string,
+    matches: TrackMatch[],
+    options?: SyncPlaylistOptions
   ): Promise<ExportResult>;
   createPlaylist(name: string, songIds: string[]): Promise<{ id: string; success: boolean }>;
   appendToPlaylist(playlistId: string, songIds: string[]): Promise<{ success: boolean }>;
@@ -288,6 +300,164 @@ export class DefaultPlaylistExporter implements PlaylistExporter {
         exported,
         failed,
         skipped,
+      },
+      errors,
+      duration: Date.now() - startTime,
+    };
+  }
+
+  async syncPlaylist(
+    playlistName: string,
+    spotifyPlaylistId: string,
+    spotifySnapshotId: string,
+    matches: TrackMatch[],
+    options: SyncPlaylistOptions = {}
+  ): Promise<ExportResult> {
+    const startTime = Date.now();
+    const { onProgress, signal } = options;
+    const errors: ExportError[] = [];
+    let exported = 0;
+    let playlistId: string | undefined;
+
+    const checkAbort = () => {
+      if (signal?.aborted) {
+        throw new DOMException('Export was cancelled', 'AbortError');
+      }
+    };
+
+    const matchedTracks = matches.filter((m) => m.status === 'matched' && m.navidromeSong);
+    const desiredSongIds = matchedTracks.map((m) => m.navidromeSong!.id);
+
+    if (onProgress) {
+      checkAbort();
+      await onProgress({
+        current: 0,
+        total: matchedTracks.length,
+        percent: 0,
+        status: 'preparing',
+      });
+    }
+
+    let actualMode: ExportMode = 'create';
+
+    try {
+      checkAbort();
+
+      // Server-side check: does this playlist already exist in Navidrome?
+      const existingPlaylist = await this.navidromeClient.getPlaylistByComment(spotifyPlaylistId);
+
+      if (existingPlaylist) {
+        // UPDATE existing playlist
+        actualMode = 'sync';
+        playlistId = existingPlaylist.id;
+
+        // Get current tracks in the Navidrome playlist
+        const playlistData = await this.navidromeClient.getPlaylist(existingPlaylist.id, signal);
+        const existingSongIds = new Set(playlistData.tracks.map((t) => t.id));
+        const desiredSet = new Set(desiredSongIds);
+
+        // Calculate diff
+        const toAdd = desiredSongIds.filter((id) => !existingSongIds.has(id));
+        const indicesToRemove = playlistData.tracks
+          .map((t, index) => ({ id: t.id, index }))
+          .filter((t) => !desiredSet.has(t.id))
+          .map((t) => t.index);
+
+        // Apply additions
+        if (toAdd.length > 0) {
+          checkAbort();
+          await this.navidromeClient.updatePlaylist(existingPlaylist.id, toAdd, undefined, signal);
+        }
+
+        // Apply removals
+        if (indicesToRemove.length > 0) {
+          checkAbort();
+          await this.navidromeClient.updatePlaylist(existingPlaylist.id, [], indicesToRemove, signal);
+        }
+
+        exported = toAdd.length;
+
+        // Update comment metadata
+        checkAbort();
+        await this.navidromeClient.updatePlaylistComment(existingPlaylist.id, {
+          spotifyPlaylistId,
+          navidromePlaylistId: existingPlaylist.id,
+          spotifySnapshotId,
+          exportedAt: new Date().toISOString(),
+          trackCount: matches.length,
+        }, signal);
+
+      } else {
+        // CREATE new playlist
+        actualMode = 'create';
+
+        if (matchedTracks.length === 0) {
+          return {
+            success: true,
+            playlistName,
+            mode: 'create',
+            statistics: {
+              total: matches.length,
+              exported: 0,
+              failed: 0,
+              skipped: matches.length,
+            },
+            errors: [],
+            duration: Date.now() - startTime,
+          };
+        }
+
+        checkAbort();
+        const createResult = await this.createPlaylist(playlistName, desiredSongIds, signal);
+        playlistId = createResult.id;
+        exported = createResult.success ? desiredSongIds.length : 0;
+
+        // Set comment metadata for future server-side lookups
+        if (playlistId) {
+          checkAbort();
+          await this.navidromeClient.updatePlaylistComment(playlistId, {
+            spotifyPlaylistId,
+            navidromePlaylistId: playlistId,
+            spotifySnapshotId,
+            exportedAt: new Date().toISOString(),
+            trackCount: matches.length,
+          }, signal);
+        }
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        throw error;
+      }
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      errors.push({
+        trackName: 'N/A',
+        artistName: 'N/A',
+        reason: `Failed to sync playlist: ${errorMessage}`,
+      });
+    }
+
+    if (onProgress) {
+      checkAbort();
+      await onProgress({
+        current: matchedTracks.length,
+        total: matchedTracks.length,
+        percent: 100,
+        status: exported > 0 || matchedTracks.length > 0 ? 'completed' : 'failed',
+      });
+    }
+
+    const success = errors.length === 0 && (exported > 0 || matchedTracks.length > 0);
+
+    return {
+      success,
+      playlistId,
+      playlistName,
+      mode: actualMode,
+      statistics: {
+        total: matches.length,
+        exported,
+        failed: errors.length,
+        skipped: matches.length - matchedTracks.length,
       },
       errors,
       duration: Date.now() - startTime,

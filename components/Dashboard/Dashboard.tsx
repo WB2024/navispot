@@ -32,14 +32,12 @@ import {
 import { getMatchStatistics } from "@/lib/matching/orchestrator"
 import {
   createPlaylistExporter,
-  PlaylistExporterOptions,
 } from "@/lib/export/playlist-exporter"
 import { createFavoritesExporter } from "@/lib/export/favorites-exporter"
 import {
   loadPlaylistExportData,
   savePlaylistExportData,
   getAllExportData,
-  isPlaylistUpToDate,
   type PlaylistExportData,
   type TrackExportStatus,
 } from "@/lib/export/track-export-cache"
@@ -719,13 +717,10 @@ export function Dashboard() {
             (t) => t.track,
           )
 
-          // Check for cached export data
+          // Check for cached match data (performance optimization to avoid re-matching already matched tracks)
           cachedData = loadPlaylistExportData(item.id)
-          const upToDate = cachedData
-            ? isPlaylistUpToDate(cachedData, item.snapshot_id || "")
-            : false
-          const hasNavidromePlaylist = !!cachedData?.navidromePlaylistId
-          useDifferentialMatching = hasNavidromePlaylist
+          // Use differential matching if we have any cached match results
+          useDifferentialMatching = !!cachedData && Object.keys(cachedData.tracks).length > 0
         }
 
         progress = updateProgress(progress, {
@@ -1056,54 +1051,47 @@ export function Dashboard() {
             setIsExporting(false)
           }
         } else {
-          const exporterOptions: PlaylistExporterOptions = {
-            mode:
-              useDifferentialMatching && cachedData?.navidromePlaylistId
-                ? "update"
-                : "create",
-            existingPlaylistId: cachedData?.navidromePlaylistId,
-            skipUnmatched: false,
-            cachedData: useDifferentialMatching ? cachedData : undefined,
-            signal,
-            onProgress: async (exportProgress) => {
-              progress = updateProgress(progress, {
-                phase:
-                  exportProgress.status === "completed"
-                    ? "completed"
-                    : "exporting",
-                progress: {
-                  current: exportProgress.current,
-                  total: exportProgress.total,
-                  percent: exportProgress.percent,
-                },
-                statistics: {
-                  matched: statistics.matched,
-                  unmatched: statistics.unmatched,
-                  exported: exportProgress.current,
-                  failed: 0,
-                },
-              })
-              setProgressState({ ...progress })
-              setSelectedPlaylistsStats((prev) =>
-                prev.map((stat, idx) =>
-                  idx === i
-                    ? {
-                        ...stat,
-                        progress: exportProgress.percent,
-                        exported: exportProgress.current,
-                        matched: statistics.matched,
-                        unmatched: statistics.unmatched,
-                      }
-                    : stat,
-                ),
-              )
-            },
-          }
-
-          const result = await playlistExporter.exportPlaylist(
+          const result = await playlistExporter.syncPlaylist(
             item.name,
+            item.id,
+            item.snapshot_id || "",
             matches,
-            exporterOptions,
+            {
+              signal,
+              onProgress: async (exportProgress) => {
+                progress = updateProgress(progress, {
+                  phase:
+                    exportProgress.status === "completed"
+                      ? "completed"
+                      : "exporting",
+                  progress: {
+                    current: exportProgress.current,
+                    total: exportProgress.total,
+                    percent: exportProgress.percent,
+                  },
+                  statistics: {
+                    matched: statistics.matched,
+                    unmatched: statistics.unmatched,
+                    exported: exportProgress.current,
+                    failed: 0,
+                  },
+                })
+                setProgressState({ ...progress })
+                setSelectedPlaylistsStats((prev) =>
+                  prev.map((stat, idx) =>
+                    idx === i
+                      ? {
+                          ...stat,
+                          progress: exportProgress.percent,
+                          exported: exportProgress.current,
+                          matched: statistics.matched,
+                          unmatched: statistics.unmatched,
+                        }
+                      : stat,
+                  ),
+                )
+              },
+            },
           )
 
           exportResultData = {
