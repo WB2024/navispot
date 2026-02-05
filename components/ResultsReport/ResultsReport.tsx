@@ -49,7 +49,8 @@ const downloadLog = (result: ResultsReportProps['result']): void => {
   const blob = new Blob([logContent], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  const fileName = `export-log-${result.playlistName.replace(/[^a-zA-Z0-9]/g, '_')}-${result.timestamp.toISOString().split('T')[0]}.json`;
+  const dateTime = `${result.timestamp.toISOString().split('T')[0]}_${result.timestamp.toTimeString().slice(0, 8).replace(/:/g, '-')}`;
+  const fileName = `export-log-${result.playlistName.replace(/[^a-zA-Z0-9]/g, '_')}-${dateTime}.json`;
   
   a.href = url;
   a.download = fileName;

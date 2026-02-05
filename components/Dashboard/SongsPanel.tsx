@@ -73,7 +73,13 @@ export function SongsPanel({
     const url = URL.createObjectURL(blob)
     const link = document.createElement("a")
     link.href = url
-    link.download = `unmatched-songs-${new Date().toISOString().split("T")[0]}.json`
+    const now = new Date()
+    const dateTime = `${now.toISOString().split("T")[0]}_${now.toTimeString().slice(0, 8).replace(/:/g, "-")}`
+    const names = playlistGroups.map((g) => g.playlistName).filter(Boolean)
+    const playlistLabel = names.length === 1
+      ? names[0].replace(/[^a-zA-Z0-9]/g, "_")
+      : `${names.length}_playlists`
+    link.download = `unmatched-songs-${playlistLabel}-${dateTime}.json`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
