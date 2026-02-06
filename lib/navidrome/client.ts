@@ -713,20 +713,28 @@ export class NavidromeApiClient {
     await this._ensureAuthenticated();
 
     const comment = JSON.stringify(metadata);
-    const url = `${this.baseUrl}/api/playlist/${playlistId}`;
+    
+    // Use Subsonic API endpoint which properly supports the comment field
+    // The native Navidrome API PATCH doesn't reliably set the comment
+    const url = this._buildSubsonicUrl('/rest/updatePlaylist', {
+      playlistId,
+      comment,
+    });
+    
     const response = await fetch(url, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-nd-authorization': `Bearer ${this._ndToken}`,
-        'x-nd-client-unique-id': `${this._ndClientId}`,
-      },
-      body: JSON.stringify({ comment }),
+      method: 'GET', // Subsonic API uses GET with query params
       signal,
     });
 
     if (!response.ok) {
       throw new Error(`Failed to update playlist comment: ${response.status} ${response.statusText}`);
+    }
+    
+    // Check the Subsonic response for errors
+    const data = await response.json();
+    if (data['subsonic-response']?.status === 'failed') {
+      const error = data['subsonic-response']?.error;
+      throw new Error(`Failed to update playlist comment: ${error?.message || 'Unknown error'}`);
     }
   }
 

@@ -19,6 +19,11 @@ export interface TrackExportStatus {
   matchedAlbum?: string;
   matchedArtist?: string;
   candidates?: CandidateInfo[];
+  // Store original Spotify track info for unmatched tracks display
+  title?: string;
+  album?: string;
+  artist?: string;
+  duration?: string;
 }
 
 export interface PlaylistExportData {

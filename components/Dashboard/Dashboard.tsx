@@ -1078,6 +1078,11 @@ export function Dashboard() {
                   matchedAlbum: match.navidromeSong?.album,
                   matchedArtist: match.navidromeSong?.artist,
                   candidates: toCandidateInfos(match.candidates),
+                  // Store original Spotify track info for display of unmatched tracks
+                  title: track.name,
+                  album: track.album?.name || "Unknown",
+                  artist: track.artists?.map((a) => a.name).join(", ") || "Unknown",
+                  duration: formatDuration(track.duration_ms),
                 }
                 tracksData[track.id] = status
 
@@ -1116,6 +1121,11 @@ export function Dashboard() {
                   matchedAlbum: match.navidromeSong?.album,
                   matchedArtist: match.navidromeSong?.artist,
                   candidates: toCandidateInfos(match.candidates),
+                  // Store original Spotify track info for display of unmatched tracks
+                  title: track.name,
+                  album: track.album?.name || "Unknown",
+                  artist: track.artists?.map((a) => a.name).join(", ") || "Unknown",
+                  duration: formatDuration(track.duration_ms),
                 }
                 tracksData[track.id] = status
                 if (match.status === "matched") {
@@ -1339,6 +1349,11 @@ export function Dashboard() {
                   matchedAlbum: match.navidromeSong?.album,
                   matchedArtist: match.navidromeSong?.artist,
                   candidates: toCandidateInfos(match.candidates),
+                  // Store original Spotify track info for display of unmatched tracks
+                  title: track.name,
+                  album: track.album?.name || "Unknown",
+                  artist: track.artists?.map((a) => a.name).join(", ") || "Unknown",
+                  duration: formatDuration(track.duration_ms),
                 }
 
                 if (match.status === "matched") {
@@ -1775,9 +1790,15 @@ export function Dashboard() {
     return selectedPlaylistsStats
       .filter((p) => checkedPlaylistIds.has(p.id))
       .map((playlist) => {
-        const songs = playlistTracksCache.get(playlist.id) || []
+        const currentSongs = playlistTracksCache.get(playlist.id) || []
         const statusMap = songExportStatus.get(playlist.id)
-        const songsWithStatus = songs.map((song) => {
+        const cachedData = trackExportCache.get(playlist.id)
+        
+        // Build set of current track IDs for quick lookup
+        const currentTrackIds = new Set(currentSongs.map(s => s.spotifyTrackId))
+        
+        // Map current songs with their status
+        const songsWithStatus = currentSongs.map((song) => {
           const statusEntry = statusMap?.get(song.spotifyTrackId)
           const status = typeof statusEntry === 'object' ? statusEntry.status : (statusEntry || "waiting")
           return {
@@ -1790,6 +1811,30 @@ export function Dashboard() {
             candidates: typeof statusEntry === 'object' ? statusEntry.candidates : undefined,
           }
         })
+        
+        // Add unmatched tracks from cache that are no longer in the current Spotify playlist
+        // This ensures the unmatched count matches between left and right panels
+        if (cachedData?.tracks) {
+          Object.entries(cachedData.tracks).forEach(([trackId, trackData]) => {
+            if (!currentTrackIds.has(trackId) && trackData.status !== "matched") {
+              // This track was unmatched and has been removed from Spotify playlist
+              songsWithStatus.push({
+                spotifyTrackId: trackId,
+                title: trackData.title || "Unknown",
+                album: trackData.album || "Unknown",
+                artist: trackData.artist || "Unknown",
+                duration: trackData.duration || "0:00",
+                exportStatus: "failed" as const,
+                matchedTitle: undefined,
+                matchedAlbum: undefined,
+                matchedArtist: undefined,
+                matchStrategy: undefined,
+                candidates: trackData.candidates,
+              })
+            }
+          })
+        }
+        
         return {
           playlistId: playlist.id,
           playlistName: playlist.name,
@@ -1803,6 +1848,7 @@ export function Dashboard() {
     playlistTracksCache,
     loadingPlaylistIds,
     songExportStatus,
+    trackExportCache,
   ])
 
   const fixedExportButton = (
