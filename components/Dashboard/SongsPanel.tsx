@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from "react"
 import { CandidateInfo } from "@/lib/export/track-export-cache"
+import { ManualMatchTrack } from "@/components/Dashboard/ManualMatchDialog"
 
 export interface Song {
   spotifyTrackId: string
@@ -30,6 +31,7 @@ interface SongsPanelProps {
   onRematchUnmatched?: () => void
   isRematching?: boolean
   onSelectCandidate?: (playlistId: string, spotifyTrackId: string, candidate: CandidateInfo) => void
+  onManualMatch?: (track: ManualMatchTrack) => void
 }
 
 export function SongsPanel({
@@ -38,6 +40,7 @@ export function SongsPanel({
   onRematchUnmatched,
   isRematching = false,
   onSelectCandidate,
+  onManualMatch,
 }: SongsPanelProps) {
   const [showUnmatchedOnly, setShowUnmatchedOnly] = useState(false)
   const [expandedTrackKey, setExpandedTrackKey] = useState<string | null>(null)
@@ -217,17 +220,19 @@ export function SongsPanel({
               <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400 w-[5%]">
                 #
               </th>
-              <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400 w-[40%]">
+              <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400 w-[35%]">
                 Title
               </th>
-              <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400 w-[25%]">
+              <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400 w-[22%]">
                 Album
               </th>
-              <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400 w-[20%]">
+              <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400 w-[18%]">
                 Artist
               </th>
               <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400 w-[10%]">
                 Duration
+              </th>
+              <th className="px-4 py-2 text-center text-xs font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400 w-[10%]">
               </th>
             </tr>
           </thead>
@@ -237,7 +242,7 @@ export function SongsPanel({
                 {/* Section Header */}
                 <tr>
                   <td
-                    colSpan={5}
+                    colSpan={6}
                     className="bg-zinc-100 dark:bg-zinc-800 px-4 py-2 font-semibold text-sm border-t-2 border-zinc-300 dark:border-zinc-700"
                   >
                     <div className="flex items-center gap-2">
@@ -331,11 +336,38 @@ export function SongsPanel({
                         <td className="px-4 py-2 text-sm text-zinc-500 dark:text-zinc-400">
                           {song.duration}
                         </td>
+                        <td className="px-2 py-2 text-center">
+                          {onManualMatch && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                onManualMatch({
+                                  spotifyTrackId: song.spotifyTrackId,
+                                  playlistId: group.playlistId,
+                                  title: song.title,
+                                  artist: song.artist,
+                                  album: song.album,
+                                })
+                              }}
+                              className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
+                                song.exportStatus === "failed"
+                                  ? "text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                                  : "text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                              }`}
+                              title={song.exportStatus === "failed" ? "Search Navidrome to manually match" : "Change the matched track"}
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                              </svg>
+                              {song.exportStatus === "failed" ? "Match" : "Edit"}
+                            </button>
+                          )}
+                        </td>
                       </tr>
                       {/* Expanded candidate rows */}
                       {isExpanded && song.candidates && (
                         <tr>
-                          <td colSpan={5} className="px-0 py-0">
+                          <td colSpan={6} className="px-0 py-0">
                             <div className="bg-amber-50/50 dark:bg-amber-900/10 border-b border-zinc-200 dark:border-zinc-800">
                               <div className="px-4 py-2">
                                 <div className="text-xs font-medium text-amber-700 dark:text-amber-400 mb-2">

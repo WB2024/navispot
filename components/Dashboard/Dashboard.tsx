@@ -24,6 +24,11 @@ import {
   PlaylistGroup,
   Song,
 } from "@/components/Dashboard/SongsPanel"
+import {
+  ManualMatchDialog,
+  ManualMatchTrack,
+  ManualMatchSearchResult,
+} from "@/components/Dashboard/ManualMatchDialog"
 import { ProgressState } from "@/components/ProgressTracker"
 import {
   createBatchMatcher,
@@ -144,6 +149,8 @@ export function Dashboard() {
   >(new Map())
   const [playlistCreatedDates, setPlaylistCreatedDates] = useState<Map<string, string>>(new Map())
   const [fetchingDates, setFetchingDates] = useState(false)
+  const [manualMatchTrack, setManualMatchTrack] = useState<ManualMatchTrack | null>(null)
+  const [showManualMatchDialog, setShowManualMatchDialog] = useState(false)
 
   useEffect(() => {
     async function fetchData() {
@@ -1093,6 +1100,8 @@ export function Dashboard() {
         const unmatchedSongsList: UnmatchedSong[] = matches
           .filter((m: TrackMatch) => m.status === "unmatched")
           .map((m: TrackMatch) => ({
+            spotifyTrackId: m.spotifyTrack.id,
+            playlistId: item.id,
             title: m.spotifyTrack.name,
             album: m.spotifyTrack.album?.name || "Unknown",
             artist:
@@ -1399,6 +1408,132 @@ export function Dashboard() {
     }
   }, [setSongExportStatus, setTrackExportCache])
 
+  const handleOpenManualMatch = useCallback((track: ManualMatchTrack) => {
+    setManualMatchTrack(track)
+    setShowManualMatchDialog(true)
+  }, [])
+
+  const handleManualMatchSearch = useCallback(async (query: { title: string; artist: string; album: string }): Promise<ManualMatchSearchResult[]> => {
+    if (!navidrome.credentials) return []
+
+    const client = new NavidromeApiClient(
+      navidrome.credentials.url,
+      navidrome.credentials.username,
+      navidrome.credentials.password,
+      navidrome.token ?? undefined,
+      navidrome.clientId ?? undefined,
+    )
+
+    const results: ManualMatchSearchResult[] = []
+    const seenIds = new Set<string>()
+
+    // Search by title if provided
+    if (query.title) {
+      const titleResults = await client.searchBySubsonic(query.title, 30)
+      for (const song of titleResults) {
+        if (!seenIds.has(song.id)) {
+          seenIds.add(song.id)
+          results.push({
+            id: song.id,
+            title: song.title,
+            artist: song.artist,
+            album: song.album,
+            duration: song.duration,
+          })
+        }
+      }
+    }
+
+    // Also search by artist if provided and we haven't found enough
+    if (query.artist && results.length < 20) {
+      const artistResults = await client.searchBySubsonic(query.artist, 20)
+      for (const song of artistResults) {
+        if (!seenIds.has(song.id)) {
+          seenIds.add(song.id)
+          results.push({
+            id: song.id,
+            title: song.title,
+            artist: song.artist,
+            album: song.album,
+            duration: song.duration,
+          })
+        }
+      }
+    }
+
+    // Also search by album if provided and we still haven't found enough
+    if (query.album && results.length < 20) {
+      const albumResults = await client.searchBySubsonic(query.album, 20)
+      for (const song of albumResults) {
+        if (!seenIds.has(song.id)) {
+          seenIds.add(song.id)
+          results.push({
+            id: song.id,
+            title: song.title,
+            artist: song.artist,
+            album: song.album,
+            duration: song.duration,
+          })
+        }
+      }
+    }
+
+    return results
+  }, [navidrome.credentials, navidrome.token, navidrome.clientId])
+
+  const handleManualMatchSelect = useCallback((track: ManualMatchTrack, result: ManualMatchSearchResult) => {
+    // Update the songExportStatus
+    setSongExportStatus((prev) => {
+      const newStatus = new Map(prev)
+      const playlistStatus = new Map(prev.get(track.playlistId) || [])
+      const existing = playlistStatus.get(track.spotifyTrackId)
+      playlistStatus.set(track.spotifyTrackId, {
+        ...existing,
+        status: "exported",
+        matchedTitle: result.title,
+        matchedAlbum: result.album,
+        matchedArtist: result.artist,
+        matchStrategy: "manual",
+        candidates: undefined,
+      })
+      newStatus.set(track.playlistId, playlistStatus)
+      return newStatus
+    })
+
+    // Update the cache
+    const cachedData = loadPlaylistExportData(track.playlistId)
+    if (cachedData) {
+      const existingTrack = cachedData.tracks[track.spotifyTrackId]
+      const wasUnmatched = existingTrack?.status === "unmatched"
+      const wasAmbiguous = existingTrack?.status === "ambiguous"
+
+      cachedData.tracks[track.spotifyTrackId] = {
+        ...existingTrack,
+        spotifyTrackId: track.spotifyTrackId,
+        navidromeSongId: result.id,
+        status: "matched",
+        matchStrategy: "manual",
+        matchScore: 1,
+        matchedTitle: result.title,
+        matchedAlbum: result.album,
+        matchedArtist: result.artist,
+        matchedAt: new Date().toISOString(),
+        candidates: undefined,
+      }
+
+      if (wasUnmatched && cachedData.statistics.unmatched > 0) {
+        cachedData.statistics.unmatched--
+        cachedData.statistics.matched++
+      } else if (wasAmbiguous && cachedData.statistics.ambiguous > 0) {
+        cachedData.statistics.ambiguous--
+        cachedData.statistics.matched++
+      }
+
+      savePlaylistExportData(track.playlistId, cachedData)
+      setTrackExportCache((prev) => new Map(prev).set(track.playlistId, cachedData))
+    }
+  }, [setSongExportStatus, setTrackExportCache])
+
   const handleRematchUnmatched = async () => {
     if (!navidrome.credentials || !spotify.token || isExporting || isRematching) return
 
@@ -1681,6 +1816,7 @@ export function Dashboard() {
       onRematchUnmatched={handleRematchUnmatched}
       isRematching={isRematching}
       onSelectCandidate={handleSelectCandidate}
+      onManualMatch={handleOpenManualMatch}
     />
   )
 
@@ -1852,6 +1988,14 @@ export function Dashboard() {
         unmatchedSongsSection={songsSection}
         mainTableSection={mainTableSection}
         fixedExportButton={fixedExportButton}
+      />
+
+      <ManualMatchDialog
+        isOpen={showManualMatchDialog}
+        track={manualMatchTrack}
+        onClose={() => setShowManualMatchDialog(false)}
+        onSearch={handleManualMatchSearch}
+        onSelect={handleManualMatchSelect}
       />
     </div>
   )

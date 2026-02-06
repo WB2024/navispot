@@ -12,7 +12,7 @@ export interface TrackExportStatus {
   spotifyTrackId: string;
   navidromeSongId?: string;
   status: 'matched' | 'ambiguous' | 'unmatched';
-  matchStrategy: 'isrc' | 'fuzzy' | 'strict' | 'none';
+  matchStrategy: 'isrc' | 'fuzzy' | 'strict' | 'manual' | 'none';
   matchScore: number;
   matchedAt: string;
   matchedTitle?: string;

@@ -10,3 +10,4 @@ export { TableRow } from './TableRow';
 export { LovedSongsRow } from './LovedSongsRow';
 export { SelectedPlaylistsPanel } from './SelectedPlaylistsPanel';
 export { UnmatchedSongsPanel } from './UnmatchedSongsPanel';
+export { ManualMatchDialog } from './ManualMatchDialog';

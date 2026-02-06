@@ -1,6 +1,8 @@
 'use client';
 
 export interface UnmatchedSong {
+  spotifyTrackId: string;
+  playlistId: string;
   title: string;
   album: string;
   artist: string;
@@ -10,9 +12,10 @@ export interface UnmatchedSong {
 interface UnmatchedSongsPanelProps {
   unmatchedSongs: UnmatchedSong[];
   isEmpty: boolean;
+  onManualMatch?: (song: UnmatchedSong) => void;
 }
 
-export function UnmatchedSongsPanel({ unmatchedSongs, isEmpty }: UnmatchedSongsPanelProps) {
+export function UnmatchedSongsPanel({ unmatchedSongs, isEmpty, onManualMatch }: UnmatchedSongsPanelProps) {
   if (isEmpty) {
     return (
       <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden flex flex-col h-full">
@@ -108,10 +111,21 @@ export function UnmatchedSongsPanel({ unmatchedSongs, isEmpty }: UnmatchedSongsP
             {unmatchedSongs.map((song, index) => (
               <tr
                 key={index}
-                className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors"
+                onClick={() => onManualMatch?.(song)}
+                className={`hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors ${
+                  onManualMatch ? "cursor-pointer" : ""
+                }`}
+                title={onManualMatch ? "Click to manually match this track" : undefined}
               >
                 <td className="px-4 py-2 text-sm text-zinc-900 dark:text-zinc-100 truncate max-w-[200px]" title={song.title}>
-                  {song.title}
+                  <div className="flex items-center gap-1.5">
+                    {onManualMatch && (
+                      <svg className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400 flex-shrink-0 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                    )}
+                    <span>{song.title}</span>
+                  </div>
                 </td>
                 <td className="px-4 py-2 text-sm text-zinc-600 dark:text-zinc-400 truncate max-w-[120px]" title={song.album}>
                   {song.album}
