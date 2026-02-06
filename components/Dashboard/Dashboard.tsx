@@ -719,16 +719,16 @@ export function Dashboard() {
     return result
   }, [tableItems, searchQuery, sortColumn, sortDirection, ownerFilter, visibilityFilter, dateAfterFilter, dateBeforeFilter])
 
-  const handleSort = (column: "name" | "tracks" | "owner") => {
+  const handleSort = useCallback((column: "name" | "tracks" | "owner") => {
     if (sortColumn === column) {
       setSortDirection(sortDirection === "asc" ? "desc" : "asc")
     } else {
       setSortColumn(column)
       setSortDirection("asc")
     }
-  }
+  }, [sortColumn, sortDirection])
 
-  const handleToggleSelection = (playlistId: string) => {
+  const handleToggleSelection = useCallback((playlistId: string) => {
     setSelectedIds((prev) => {
       const newSet = new Set(prev)
       if (newSet.has(playlistId)) {
@@ -738,17 +738,17 @@ export function Dashboard() {
       }
       return newSet
     })
-  }
+  }, [])
 
-  const handleToggleSelectAll = () => {
+  const handleToggleSelectAll = useCallback(() => {
     if (selectedIds.size === filteredItems.length && filteredItems.length > 0) {
       setSelectedIds(new Set())
     } else {
       setSelectedIds(new Set(filteredItems.map((item) => item.id)))
     }
-  }
+  }, [selectedIds.size, filteredItems])
 
-  const handleTogglePlaylistCheck = (playlistId: string) => {
+  const handleTogglePlaylistCheck = useCallback((playlistId: string) => {
     setCheckedPlaylistIds((prev) => {
       const newSet = new Set(prev)
       if (newSet.has(playlistId)) {
@@ -758,9 +758,9 @@ export function Dashboard() {
       }
       return newSet
     })
-  }
+  }, [])
 
-  const handleToggleCheckAllPlaylists = () => {
+  const handleToggleCheckAllPlaylists = useCallback(() => {
     if (
       checkedPlaylistIds.size === selectedPlaylistsStats.length &&
       selectedPlaylistsStats.length > 0
@@ -769,7 +769,7 @@ export function Dashboard() {
     } else {
       setCheckedPlaylistIds(new Set(selectedPlaylistsStats.map((p) => p.id)))
     }
-  }
+  }, [checkedPlaylistIds.size, selectedPlaylistsStats])
 
   const createInitialProgressState = (total: number): ProgressState => ({
     phase: "matching",
@@ -1737,13 +1737,13 @@ export function Dashboard() {
     }
   }
 
-  const handleCancelExport = () => {
+  const handleCancelExport = useCallback(() => {
     if (isExportingRef.current) {
       setShowCancelConfirmation(true)
     }
-  }
+  }, [])
 
-  const handleConfirmCancel = () => {
+  const handleConfirmCancel = useCallback(() => {
     abortControllerRef.current?.abort()
     isExportingRef.current = false
     setIsExporting(false)
@@ -1757,18 +1757,18 @@ export function Dashboard() {
     setUnmatchedSongs([])
     setSongExportStatus(new Map())
     setShowCancelConfirmation(false)
-  }
+  }, [])
 
-  const handleCloseCancelConfirmation = () => {
+  const handleCloseCancelConfirmation = useCallback(() => {
     setShowCancelConfirmation(false)
-  }
+  }, [])
 
-  const handlePlaylistClick = (id: string) => {
+  const handlePlaylistClick = useCallback((id: string) => {
     const stats = selectedPlaylistsStats.find((s) => s.id === id)
     if (stats) {
       setCurrentUnmatchedPlaylistId(id)
     }
-  }
+  }, [selectedPlaylistsStats])
 
   const confirmationPlaylists: PlaylistInfo[] = useMemo(() => {
     const result: PlaylistInfo[] = []

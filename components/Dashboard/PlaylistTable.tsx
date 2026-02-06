@@ -243,12 +243,6 @@ const PlaylistRow = ({
 }
 
 const LovedSongsRow = ({
-      </td>
-    </tr>
-  )
-}
-
-const LovedSongsRow = ({
   count,
   isSelected,
   onToggle,
