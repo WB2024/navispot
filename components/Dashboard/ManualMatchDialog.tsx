@@ -39,7 +39,9 @@ export function ManualMatchDialog({
   const [results, setResults] = useState<ManualMatchSearchResult[]>([])
   const [isSearching, setIsSearching] = useState(false)
   const [hasSearched, setHasSearched] = useState(false)
+  const [searchError, setSearchError] = useState<string | null>(null)
   const titleRef = useRef<HTMLInputElement>(null)
+  const focusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Pre-fill fields when the track changes
   useEffect(() => {
@@ -49,8 +51,16 @@ export function ManualMatchDialog({
       setAlbumQuery(track.album)
       setResults([])
       setHasSearched(false)
+      setSearchError(null)
       // Focus the title field after render
-      setTimeout(() => titleRef.current?.select(), 50)
+      focusTimerRef.current = setTimeout(() => titleRef.current?.select(), 50)
+    }
+
+    return () => {
+      if (focusTimerRef.current) {
+        clearTimeout(focusTimerRef.current)
+        focusTimerRef.current = null
+      }
     }
   }, [track, isOpen])
 
@@ -59,6 +69,7 @@ export function ManualMatchDialog({
 
     setIsSearching(true)
     setHasSearched(true)
+    setSearchError(null)
     try {
       const searchResults = await onSearch({
         title: titleQuery.trim(),
@@ -68,6 +79,7 @@ export function ManualMatchDialog({
       setResults(searchResults)
     } catch (err) {
       console.error("Manual match search failed:", err)
+      setSearchError(err instanceof Error ? err.message : "Search failed. Please try again.")
       setResults([])
     } finally {
       setIsSearching(false)
@@ -106,11 +118,17 @@ export function ManualMatchDialog({
   if (!isOpen || !track) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="manual-match-title"
+    >
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         onClick={onClose}
+        aria-hidden="true"
       />
 
       {/* Dialog */}
@@ -118,7 +136,10 @@ export function ManualMatchDialog({
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-200 dark:border-zinc-800 flex-shrink-0">
           <div>
-            <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+            <h2
+              id="manual-match-title"
+              className="text-base font-semibold text-zinc-900 dark:text-zinc-100"
+            >
               Manual Match
             </h2>
             <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
@@ -134,7 +155,8 @@ export function ManualMatchDialog({
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+            aria-label="Close dialog"
+            className="p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -144,12 +166,13 @@ export function ManualMatchDialog({
 
         {/* Search fields */}
         <div className="px-5 py-3 border-b border-zinc-200 dark:border-zinc-800 flex-shrink-0">
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+              <label htmlFor="manual-match-title-input" className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
                 Title
               </label>
               <input
+                id="manual-match-title-input"
                 ref={titleRef}
                 type="text"
                 value={titleQuery}
@@ -160,10 +183,11 @@ export function ManualMatchDialog({
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+              <label htmlFor="manual-match-artist-input" className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
                 Artist
               </label>
               <input
+                id="manual-match-artist-input"
                 type="text"
                 value={artistQuery}
                 onChange={(e) => setArtistQuery(e.target.value)}
@@ -173,10 +197,11 @@ export function ManualMatchDialog({
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+              <label htmlFor="manual-match-album-input" className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
                 Album
               </label>
               <input
+                id="manual-match-album-input"
                 type="text"
                 value={albumQuery}
                 onChange={(e) => setAlbumQuery(e.target.value)}
@@ -190,7 +215,7 @@ export function ManualMatchDialog({
             <button
               onClick={handleSearch}
               disabled={isSearching || (!titleQuery.trim() && !artistQuery.trim() && !albumQuery.trim())}
-              className="px-4 py-1.5 text-sm font-medium rounded-md bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              className="px-4 py-1.5 text-sm font-medium rounded-md bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-zinc-900"
             >
               {isSearching ? (
                 <>
@@ -230,6 +255,15 @@ export function ManualMatchDialog({
                 Searching Navidrome...
               </p>
             </div>
+          ) : searchError ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center px-4">
+              <svg className="w-10 h-10 text-red-400 dark:text-red-500 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <p className="text-sm text-red-600 dark:text-red-400">
+                {searchError}
+              </p>
+            </div>
           ) : results.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <svg className="w-10 h-10 text-zinc-300 dark:text-zinc-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -250,7 +284,7 @@ export function ManualMatchDialog({
                 <button
                   key={result.id}
                   onClick={() => handleSelect(result)}
-                  className="w-full px-5 py-3 text-left hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors group"
+                  className="w-full px-5 py-3 text-left hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors group focus:outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20"
                 >
                   <div className="flex items-center gap-3">
                     <div className="flex-1 min-w-0">
@@ -272,7 +306,7 @@ export function ManualMatchDialog({
                         </span>
                       </div>
                     </div>
-                    <span className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-xs font-medium text-blue-600 dark:text-blue-400 px-2.5 py-1 rounded-md bg-blue-100 dark:bg-blue-900/30">
+                    <span className="flex-shrink-0 opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity text-xs font-medium text-blue-600 dark:text-blue-400 px-2.5 py-1 rounded-md bg-blue-100 dark:bg-blue-900/30">
                       Select
                     </span>
                   </div>

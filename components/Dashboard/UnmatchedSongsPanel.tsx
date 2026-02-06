@@ -108,9 +108,9 @@ export function UnmatchedSongsPanel({ unmatchedSongs, isEmpty, onManualMatch }: 
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
-            {unmatchedSongs.map((song, index) => (
+            {unmatchedSongs.map((song) => (
               <tr
-                key={index}
+                key={song.spotifyTrackId}
                 onClick={() => onManualMatch?.(song)}
                 className={`hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors ${
                   onManualMatch ? "cursor-pointer" : ""

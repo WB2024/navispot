@@ -663,8 +663,8 @@ export function PlaylistTable({
                   </span>
                 </th>
                 <th className="px-2 py-2 text-left w-16 hidden lg:table-cell">
-                  <span className="text-xs font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-                    🌐
+                  <span className="text-xs font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400" title="Visibility">
+                    Vis
                   </span>
                 </th>
                 <th className="px-2 py-2 text-left w-24">

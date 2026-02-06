@@ -149,26 +149,6 @@ export function ProgressTracker({ state, onCancel, onComplete }: ProgressTracker
         </div>
       </div>
 
-      <style jsx global>{`
-        @keyframes progress-stripes {
-          0% { background-position: 0 0; }
-          100% { background-position: 16px 0; }
-        }
-        .animate-progress-stripes {
-          background-image: linear-gradient(
-            45deg,
-            rgba(255, 255, 255, 0.15) 25%,
-            transparent 25%,
-            transparent 50%,
-            rgba(255, 255, 255, 0.15) 50%,
-            rgba(255, 255, 255, 0.15) 75%,
-            transparent 75%,
-            transparent
-          );
-          background-size: 16px 16px;
-          animation: progress-stripes 1s linear infinite;
-        }
-      `}</style>
     </div>
   );
 }

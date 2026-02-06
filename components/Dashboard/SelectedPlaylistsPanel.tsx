@@ -1,7 +1,5 @@
 "use client"
 
-import { useState } from "react"
-
 export interface SelectedPlaylist {
   id: string
   name: string
@@ -53,23 +51,9 @@ export function SelectedPlaylistsPanel({
   onToggleCheckAll,
   statistics,
 }: SelectedPlaylistsPanelProps) {
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
-
   const allChecked =
     selectedPlaylists.length > 0 &&
     selectedPlaylists.every((p) => checkedPlaylistIds.has(p.id))
-
-  const toggleRow = (id: string) => {
-    setExpandedRows((prev) => {
-      const newSet = new Set(prev)
-      if (newSet.has(id)) {
-        newSet.delete(id)
-      } else {
-        newSet.add(id)
-      }
-      return newSet
-    })
-  }
 
   return (
     <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden flex flex-col h-full">

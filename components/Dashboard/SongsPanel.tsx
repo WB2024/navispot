@@ -80,7 +80,6 @@ export function SongsPanel({
     })
 
     if (unmatchedSongs.length === 0) {
-      alert("No unmatched songs to download")
       return
     }
 
@@ -272,7 +271,7 @@ export function SongsPanel({
                   const isExpanded = expandedTrackKey === trackKey
 
                   return (
-                    <React.Fragment key={`${group.playlistId}-${index}`}>
+                    <React.Fragment key={`${group.playlistId}-${song.spotifyTrackId}`}>
                       <tr
                         className={`hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors border-b border-zinc-200 dark:border-zinc-800 ${
                           song.exportStatus === "exported"
