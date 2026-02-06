@@ -38,6 +38,7 @@ interface PlaylistTableProps {
   hasActiveFilters: boolean
   onClearAllFilters: () => void
   fetchingDates?: boolean
+  datesLoadedCount?: number
 }
 
 const LIKED_SONGS_ID = "liked-songs"
@@ -369,6 +370,7 @@ export function PlaylistTable({
   hasActiveFilters,
   onClearAllFilters,
   fetchingDates = false,
+  datesLoadedCount = 0,
 }: PlaylistTableProps) {
   const [showFilters, setShowFilters] = useState(false)
 
@@ -521,7 +523,9 @@ export function PlaylistTable({
               <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
                 Created after
                 {fetchingDates && (
-                  <span className="ml-1 text-blue-500 animate-pulse">⟳</span>
+                  <span className="ml-1 text-blue-500 animate-pulse" title={`Loading dates: ${datesLoadedCount}/${totalCount - 1} playlists`}>
+                    ⟳ {datesLoadedCount}/{totalCount - 1}
+                  </span>
                 )}
               </label>
               <input
