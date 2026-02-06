@@ -100,7 +100,6 @@ function formatDuration(ms: number): string {
 export function Dashboard() {
   const { spotify, navidrome } = useAuth()
   const [playlists, setPlaylists] = useState<SpotifyPlaylist[]>([])
-  const [tableItems, setTableItems] = useState<PlaylistTableItem[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -297,7 +296,7 @@ export function Dashboard() {
     setTrackExportCache(allData)
   }, [spotify.isAuthenticated])
 
-  useEffect(() => {
+  const tableItems = useMemo(() => {
     const playlistItems: PlaylistTableItem[] = playlists.map((playlist) => {
       let exportStatus: "none" | "exported" | "out-of-sync" = "none"
       let navidromePlaylistId: string | undefined
@@ -358,8 +357,7 @@ export function Dashboard() {
     })
 
     if (isExportingRef.current) {
-      setTableItems(playlistItems)
-      return
+      return playlistItems
     }
 
     const likedSongsItem: PlaylistTableItem = {
@@ -374,34 +372,44 @@ export function Dashboard() {
       exportStatus: "none",
     }
 
-    const allItems = [likedSongsItem, ...playlistItems]
-    setTableItems(allItems)
+    return [likedSongsItem, ...playlistItems]
   }, [playlists, navidromePlaylists, selectedIds, likedSongsCount, trackExportCache, playlistCreatedDates])
 
   // Background fetch of playlist created dates (earliest added_at)
+  // Fetches progressively — updates state after each playlist for immediate UI feedback
   useEffect(() => {
     if (!spotify.isAuthenticated || !spotify.token || playlists.length === 0) return
 
-    // Only fetch for playlists we don't already have dates for
-    const missingIds = playlists
-      .filter((p) => !playlistCreatedDates.has(p.id))
-      .map((p) => p.id)
-
-    if (missingIds.length === 0) return
-
     let cancelled = false
-    setFetchingDates(true)
 
     async function fetchDates() {
+      // Read current dates at time of execution
+      const currentDates = playlistCreatedDates
+      const missingIds = playlists
+        .filter((p) => !currentDates.has(p.id))
+        .map((p) => p.id)
+
+      if (missingIds.length === 0) return
+
+      setFetchingDates(true)
       try {
         spotifyClient.setToken(spotify.token!)
-        const dates = await spotifyClient.getPlaylistCreatedDates(missingIds)
-        if (!cancelled) {
-          setPlaylistCreatedDates((prev) => {
-            const next = new Map(prev)
-            dates.forEach((date, id) => next.set(id, date))
-            return next
-          })
+
+        for (const playlistId of missingIds) {
+          if (cancelled) break
+
+          try {
+            const createdDate = await spotifyClient.getPlaylistCreatedDate(playlistId)
+            if (!cancelled && createdDate) {
+              setPlaylistCreatedDates((prev) => {
+                const next = new Map(prev)
+                next.set(playlistId, createdDate)
+                return next
+              })
+            }
+          } catch {
+            // Skip playlists that fail (e.g., deleted or access revoked)
+          }
         }
       } catch (err) {
         console.warn("Failed to fetch playlist created dates:", err)
@@ -412,6 +420,7 @@ export function Dashboard() {
 
     fetchDates()
     return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spotify.isAuthenticated, spotify.token, playlists])
 
   // Sync selectedIds with selectedPlaylistsStats for real-time population
@@ -1823,6 +1832,7 @@ export function Dashboard() {
   const mainTableSection = (
     <PlaylistTable
       items={filteredItems}
+      totalCount={tableItems.length}
       likedSongsCount={likedSongsCount}
       selectedIds={selectedIds}
       onToggleSelection={handleToggleSelection}

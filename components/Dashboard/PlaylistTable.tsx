@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState } from "react"
 import Image from "next/image"
 import {
   PlaylistTableItem,
@@ -11,6 +11,7 @@ import {
 
 interface PlaylistTableProps {
   items: PlaylistTableItem[]
+  totalCount: number
   likedSongsCount: number
   selectedIds: Set<string>
   onToggleSelection: (id: string) => void
@@ -342,6 +343,7 @@ const LovedSongsRow = ({
 
 export function PlaylistTable({
   items,
+  totalCount,
   likedSongsCount,
   selectedIds,
   onToggleSelection,
@@ -369,70 +371,10 @@ export function PlaylistTable({
   fetchingDates = false,
 }: PlaylistTableProps) {
   const [showFilters, setShowFilters] = useState(false)
-  const allItems = useMemo(() => {
-    const likedSongsItem: PlaylistTableItem = {
-      id: LIKED_SONGS_ID,
-      name: "Liked Songs",
-      images: [{ url: "" }],
-      owner: { display_name: "You" },
-      tracks: { total: likedSongsCount },
-      snapshot_id: "",
-      isLikedSongs: true,
-      selected: selectedIds.has(LIKED_SONGS_ID),
-      exportStatus: "none",
-    }
 
-    const likedSongsIndex = items.findIndex((item) => !item.isLikedSongs)
-    const regularPlaylists = items.filter((item) => !item.isLikedSongs)
-
-    return [likedSongsItem, ...regularPlaylists]
-  }, [items, likedSongsCount, selectedIds])
-
-  const filteredItems = useMemo(() => {
-    let result = [...allItems]
-
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase()
-      result = result.filter(
-        (item) =>
-          item.name.toLowerCase().includes(query) ||
-          item.owner.display_name.toLowerCase().includes(query),
-      )
-    }
-
-    if (sortColumn && sortDirection) {
-      result.sort((a, b) => {
-        let aVal: string | number
-        let bVal: string | number
-
-        switch (sortColumn) {
-          case "name":
-            aVal = a.name.toLowerCase()
-            bVal = b.name.toLowerCase()
-            break
-          case "tracks":
-            aVal = a.tracks.total
-            bVal = b.tracks.total
-            break
-          case "owner":
-            aVal = a.owner.display_name.toLowerCase()
-            bVal = b.owner.display_name.toLowerCase()
-            break
-          default:
-            return 0
-        }
-
-        if (aVal < bVal) return sortDirection === "asc" ? -1 : 1
-        if (aVal > bVal) return sortDirection === "asc" ? 1 : -1
-        return 0
-      })
-    }
-
-    return result
-  }, [allItems, searchQuery, sortColumn, sortDirection])
-
-  const visibleCount = filteredItems.length
-  const selectedCount = filteredItems.filter((item) =>
+  // items are already filtered, sorted, and include Liked Songs from Dashboard
+  const visibleCount = items.length
+  const selectedCount = items.filter((item) =>
     selectedIds.has(item.id),
   ).length
   const allVisibleSelected = visibleCount > 0 && selectedCount === visibleCount
@@ -531,7 +473,7 @@ export function PlaylistTable({
             </button>
           )}
           <span>
-            Showing {filteredItems.length} of {allItems.length} playlists
+            Showing {items.length} of {totalCount} playlists
             {selectedIds.size > 0 && !isExporting && (
               <span className="ml-2 text-green-600 dark:text-green-400 font-medium">
                 ({selectedIds.size} selected)
@@ -732,8 +674,8 @@ export function PlaylistTable({
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800 bg-white dark:bg-zinc-900">
-              {filteredItems.length > 0 ? (
-                filteredItems.map((item, index) => {
+              {items.length > 0 ? (
+                items.map((item, index) => {
                   if (item.id === LIKED_SONGS_ID) {
                     return (
                       <LovedSongsRow
