@@ -136,10 +136,15 @@ export class DefaultFavoritesExporter implements FavoritesExporter {
   }
 
   async starSong(songId: string, signal?: AbortSignal): Promise<{ success: boolean }> {
-    const result = await this.navidromeClient.starSong(songId, signal);
-    return {
-      success: result.success,
-    };
+    try {
+      await this.navidromeClient.starSong(songId, signal);
+      return { success: true };
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        throw error;
+      }
+      return { success: false };
+    }
   }
 
   async starSongs(songIds: string[], signal?: AbortSignal): Promise<{ success: boolean; failedIds: string[] }> {

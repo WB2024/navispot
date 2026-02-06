@@ -137,12 +137,39 @@ const COLLABORATION_INDICATORS = [
 
 const TITLE_SUFFIX_PATTERN = /[\(\[].*[\)\]].*$|[-–—~/].*$/;
 
+// Common remaster / deluxe / edition tags that appear inline (not just in parentheses)
+const REMASTER_TAGS = [
+  'remastered', 'remaster', 'remastered version',
+  'deluxe edition', 'deluxe version', 'deluxe',
+  'special edition', 'expanded edition', 'anniversary edition',
+  'bonus track version', 'bonus tracks edition',
+  'super deluxe',
+  'mono', 'stereo',
+];
+
+// Year-qualified remaster pattern, e.g. "2011 Remaster", "2009 Remastered Version"
+const YEAR_REMASTER_PATTERN = /\b\d{4}\s+remaster(ed)?(\s+version)?\b/gi;
+
+export function stripRemasterTags(str: string): string {
+  let result = str;
+  // Strip year-qualified remaster tags first
+  result = result.replace(YEAR_REMASTER_PATTERN, ' ');
+  // Strip known remaster/deluxe tags (longest first to avoid partial matches)
+  const sorted = [...REMASTER_TAGS].sort((a, b) => b.length - a.length);
+  for (const tag of sorted) {
+    result = result.replace(new RegExp(`\\b${tag}\\b`, 'gi'), ' ');
+  }
+  return result.replace(/\s+/g, ' ').trim();
+}
+
 export function stripTitleSuffix(title: string): string {
   return title.replace(TITLE_SUFFIX_PATTERN, '').trim();
 }
 
 export function normalizeAlbumName(album: string): string {
   let normalized = album.toLowerCase();
+  // Strip remaster / deluxe tags from album names
+  normalized = stripRemasterTags(normalized);
   for (const word of SOUNDTRACK_WORDS) {
     normalized = normalized.replace(new RegExp(word, 'gi'), ' ');
   }
@@ -158,6 +185,8 @@ export function normalizeTitle(title: string): string {
   normalized = normalized.replace(/_/g, ' ');
   // Strip parenthetical/dash suffixes like "- Live At...", "(Remastered)", "[Deluxe]"
   normalized = stripTitleSuffix(normalized);
+  // Strip inline remaster/deluxe tags that survived suffix stripping
+  normalized = stripRemasterTags(normalized);
   normalized = normalized.toLowerCase();
   for (const indicator of LIVE_INDICATORS) {
     normalized = normalized.replace(new RegExp(indicator.replace(/[()\[\]]/g, '\\$&'), 'gi'), ' ');

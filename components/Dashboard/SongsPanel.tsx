@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState, useMemo } from "react"
+import { CandidateInfo } from "@/lib/export/track-export-cache"
 
 export interface Song {
   spotifyTrackId: string
@@ -9,6 +10,11 @@ export interface Song {
   artist: string
   duration: string
   exportStatus?: "waiting" | "exported" | "failed"
+  matchedTitle?: string
+  matchedAlbum?: string
+  matchedArtist?: string
+  matchStrategy?: string
+  candidates?: CandidateInfo[]
 }
 
 export interface PlaylistGroup {
@@ -21,13 +27,20 @@ export interface PlaylistGroup {
 interface SongsPanelProps {
   playlistGroups: PlaylistGroup[]
   isLoading?: boolean
+  onRematchUnmatched?: () => void
+  isRematching?: boolean
+  onSelectCandidate?: (playlistId: string, spotifyTrackId: string, candidate: CandidateInfo) => void
 }
 
 export function SongsPanel({
   playlistGroups,
   isLoading = false,
+  onRematchUnmatched,
+  isRematching = false,
+  onSelectCandidate,
 }: SongsPanelProps) {
   const [showUnmatchedOnly, setShowUnmatchedOnly] = useState(false)
+  const [expandedTrackKey, setExpandedTrackKey] = useState<string | null>(null)
 
   const filteredGroups = useMemo(() => {
     if (!showUnmatchedOnly) {
@@ -151,6 +164,29 @@ export function SongsPanel({
                 Unmatched Songs
               </span>
             </label>
+            {onRematchUnmatched && (
+              <button
+                onClick={onRematchUnmatched}
+                disabled={isRematching}
+                className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Re-match unmatched songs against Navidrome"
+              >
+                <svg
+                  className={`w-4 h-4 ${isRematching ? "animate-spin" : ""}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
+                </svg>
+                {isRematching ? "Re-matching..." : "Re-match"}
+              </button>
+            )}
             <button
               onClick={handleDownloadUnmatched}
               className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
@@ -225,43 +261,144 @@ export function SongsPanel({
                   </td>
                 </tr>
                 {/* Tracks */}
-                {group.songs.map((song, index) => (
-                  <tr
-                    key={`${group.playlistId}-${index}`}
-                    className={`hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors border-b border-zinc-200 dark:border-zinc-800 ${
-                      song.exportStatus === "exported"
-                        ? "bg-green-50 dark:bg-green-900/20"
-                        : song.exportStatus === "failed"
-                          ? "bg-red-50 dark:bg-red-900/20"
-                          : ""
-                    }`}
-                  >
-                    <td className="px-4 py-2 text-sm text-zinc-500 dark:text-zinc-400">
-                      {index + 1}
-                    </td>
-                    <td
-                      className="px-4 py-2 text-sm text-zinc-900 dark:text-zinc-100 truncate max-w-[200px]"
-                      title={song.title}
-                    >
-                      {song.title}
-                    </td>
-                    <td
-                      className="px-4 py-2 text-sm text-zinc-600 dark:text-zinc-400 truncate max-w-[120px]"
-                      title={song.album}
-                    >
-                      {song.album}
-                    </td>
-                    <td
-                      className="px-4 py-2 text-sm text-zinc-600 dark:text-zinc-400 truncate max-w-[120px]"
-                      title={song.artist}
-                    >
-                      {song.artist}
-                    </td>
-                    <td className="px-4 py-2 text-sm text-zinc-500 dark:text-zinc-400">
-                      {song.duration}
-                    </td>
-                  </tr>
-                ))}
+                {group.songs.map((song, index) => {
+                  const trackKey = `${group.playlistId}-${song.spotifyTrackId}`
+                  const hasCandidates = song.candidates && song.candidates.length > 1
+                  const isExpanded = expandedTrackKey === trackKey
+
+                  return (
+                    <React.Fragment key={`${group.playlistId}-${index}`}>
+                      <tr
+                        className={`hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors border-b border-zinc-200 dark:border-zinc-800 ${
+                          song.exportStatus === "exported"
+                            ? "bg-green-50 dark:bg-green-900/20"
+                            : song.exportStatus === "failed"
+                              ? "bg-red-50 dark:bg-red-900/20"
+                              : ""
+                        }`}
+                      >
+                        <td className="px-4 py-2 text-sm text-zinc-500 dark:text-zinc-400">
+                          <div className="flex items-center gap-1">
+                            {hasCandidates && (
+                              <button
+                                onClick={() => setExpandedTrackKey(isExpanded ? null : trackKey)}
+                                className="text-amber-500 hover:text-amber-600 dark:text-amber-400 dark:hover:text-amber-300 -ml-1"
+                                title={`${song.candidates!.length} candidates — click to choose`}
+                              >
+                                <svg className={`w-3.5 h-3.5 transition-transform ${isExpanded ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                </svg>
+                              </button>
+                            )}
+                            <span>{index + 1}</span>
+                          </div>
+                        </td>
+                        <td
+                          className="px-4 py-2 text-sm text-zinc-900 dark:text-zinc-100 truncate max-w-[200px]"
+                          title={song.matchedTitle && song.matchedTitle !== song.title ? `Matched: ${song.matchedTitle}` : song.title}
+                        >
+                          <div className="flex items-center gap-1">
+                            <span>{song.title}</span>
+                            {hasCandidates && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" title="Multiple candidates found">
+                                {song.candidates!.length}
+                              </span>
+                            )}
+                          </div>
+                          {song.matchedTitle && song.matchedTitle !== song.title && (
+                            <div className="text-xs text-emerald-600 dark:text-emerald-400 truncate">
+                              → {song.matchedTitle}
+                            </div>
+                          )}
+                        </td>
+                        <td
+                          className="px-4 py-2 text-sm text-zinc-600 dark:text-zinc-400 truncate max-w-[120px]"
+                          title={song.matchedAlbum && song.matchedAlbum !== song.album ? `Matched: ${song.matchedAlbum}` : song.album}
+                        >
+                          <div>{song.album}</div>
+                          {song.matchedAlbum && song.matchedAlbum !== song.album && (
+                            <div className="text-xs text-emerald-600 dark:text-emerald-400 truncate">
+                              → {song.matchedAlbum}
+                            </div>
+                          )}
+                        </td>
+                        <td
+                          className="px-4 py-2 text-sm text-zinc-600 dark:text-zinc-400 truncate max-w-[120px]"
+                          title={song.artist}
+                        >
+                          {song.artist}
+                        </td>
+                        <td className="px-4 py-2 text-sm text-zinc-500 dark:text-zinc-400">
+                          {song.duration}
+                        </td>
+                      </tr>
+                      {/* Expanded candidate rows */}
+                      {isExpanded && song.candidates && (
+                        <tr>
+                          <td colSpan={5} className="px-0 py-0">
+                            <div className="bg-amber-50/50 dark:bg-amber-900/10 border-b border-zinc-200 dark:border-zinc-800">
+                              <div className="px-4 py-2">
+                                <div className="text-xs font-medium text-amber-700 dark:text-amber-400 mb-2">
+                                  Choose the correct match:
+                                </div>
+                                <div className="space-y-1">
+                                  {song.candidates.map((candidate, ci) => {
+                                    const isSelected = song.matchedTitle === candidate.title
+                                      && song.matchedAlbum === candidate.album
+                                      && song.matchedArtist === candidate.artist
+                                    const durationMin = Math.floor(candidate.duration / 60)
+                                    const durationSec = candidate.duration % 60
+
+                                    return (
+                                      <div
+                                        key={candidate.id}
+                                        className={`flex items-center gap-3 px-3 py-1.5 rounded text-xs transition-colors ${
+                                          isSelected
+                                            ? "bg-emerald-100 dark:bg-emerald-900/30 border border-emerald-300 dark:border-emerald-700"
+                                            : "bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 hover:border-amber-300 dark:hover:border-amber-600"
+                                        }`}
+                                      >
+                                        <span className="text-zinc-400 dark:text-zinc-500 w-4 text-right flex-shrink-0">
+                                          {ci + 1}.
+                                        </span>
+                                        <span className="font-medium text-zinc-900 dark:text-zinc-100 truncate min-w-0 flex-[2]" title={candidate.title}>
+                                          {candidate.title}
+                                        </span>
+                                        <span className="text-zinc-500 dark:text-zinc-400 truncate min-w-0 flex-[1.5]" title={candidate.album}>
+                                          {candidate.album}
+                                        </span>
+                                        <span className="text-zinc-500 dark:text-zinc-400 truncate min-w-0 flex-1" title={candidate.artist}>
+                                          {candidate.artist}
+                                        </span>
+                                        <span className="text-zinc-400 dark:text-zinc-500 flex-shrink-0 w-10 text-right">
+                                          {durationMin}:{durationSec.toString().padStart(2, "0")}
+                                        </span>
+                                        {isSelected ? (
+                                          <span className="flex-shrink-0 text-emerald-600 dark:text-emerald-400 font-medium">
+                                            ✓ Selected
+                                          </span>
+                                        ) : (
+                                          <button
+                                            onClick={() => {
+                                              onSelectCandidate?.(group.playlistId, song.spotifyTrackId, candidate)
+                                            }}
+                                            className="flex-shrink-0 px-2 py-0.5 rounded bg-amber-500 hover:bg-amber-600 text-white font-medium transition-colors"
+                                          >
+                                            Select
+                                          </button>
+                                        )}
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  )
+                })}
               </React.Fragment>
             ))}
           </tbody>

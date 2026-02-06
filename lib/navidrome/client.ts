@@ -7,6 +7,18 @@ import {
 } from '../../types/navidrome';
 import { stripTitleSuffix } from '@/lib/matching/fuzzy';
 
+export class NavidromeApiError extends Error {
+  public readonly statusCode?: number;
+  public readonly endpoint: string;
+
+  constructor(message: string, endpoint: string, statusCode?: number) {
+    super(message);
+    this.name = 'NavidromeApiError';
+    this.endpoint = endpoint;
+    this.statusCode = statusCode;
+  }
+}
+
 export interface ExportMetadata {
   spotifyPlaylistId: string;
   navidromePlaylistId?: string;
@@ -261,42 +273,50 @@ export class NavidromeApiClient {
     id: string;
     success: boolean;
   }> {
-    try {
-      const createResponse = await fetch(`${this.baseUrl}/api/playlist`, {
+    const createResponse = await fetch(`${this.baseUrl}/api/playlist`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-nd-authorization': `Bearer ${this._ndToken}`,
+        'x-nd-client-unique-id': `${this._ndClientId}`,
+      },
+      body: JSON.stringify({ name }),
+      signal,
+    });
+
+    if (!createResponse.ok) {
+      throw new NavidromeApiError(
+        `Failed to create playlist "${name}": ${createResponse.status} ${createResponse.statusText}`,
+        '/api/playlist',
+        createResponse.status,
+      );
+    }
+
+    const createData = await createResponse.json() as { id: string };
+    const playlistId = createData.id;
+
+    if (songIds.length > 0) {
+      const addResponse = await fetch(`${this.baseUrl}/api/playlist/${playlistId}/tracks`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'x-nd-authorization': `Bearer ${this._ndToken}`,
           'x-nd-client-unique-id': `${this._ndClientId}`,
         },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ ids: songIds }),
         signal,
       });
 
-      if (!createResponse.ok) {
-        return { success: false, id: '' };
+      if (!addResponse.ok) {
+        throw new NavidromeApiError(
+          `Failed to add tracks to playlist "${name}": ${addResponse.status} ${addResponse.statusText}`,
+          `/api/playlist/${playlistId}/tracks`,
+          addResponse.status,
+        );
       }
-
-      const createData = await createResponse.json() as { id: string };
-      const playlistId = createData.id;
-
-      if (songIds.length > 0) {
-        await fetch(`${this.baseUrl}/api/playlist/${playlistId}/tracks`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-nd-authorization': `Bearer ${this._ndToken}`,
-            'x-nd-client-unique-id': `${this._ndClientId}`,
-          },
-          body: JSON.stringify({ ids: songIds }),
-          signal,
-        });
-      }
-
-      return { success: true, id: playlistId };
-    } catch {
-      return { success: false, id: '' };
     }
+
+    return { success: true, id: playlistId };
   }
 
   async updatePlaylist(
@@ -305,48 +325,56 @@ export class NavidromeApiClient {
     songIdsToRemove?: number[],
     signal?: AbortSignal
   ): Promise<{ success: boolean }> {
-    try {
-      if (songIdsToAdd.length > 0) {
-        await fetch(`${this.baseUrl}/api/playlist/${playlistId}/tracks`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-nd-authorization': `Bearer ${this._ndToken}`,
-            'x-nd-client-unique-id': `${this._ndClientId}`,
-          },
-          body: JSON.stringify({ ids: songIdsToAdd }),
-          signal,
-        });
-      }
+    if (songIdsToAdd.length > 0) {
+      const addResponse = await fetch(`${this.baseUrl}/api/playlist/${playlistId}/tracks`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-nd-authorization': `Bearer ${this._ndToken}`,
+          'x-nd-client-unique-id': `${this._ndClientId}`,
+        },
+        body: JSON.stringify({ ids: songIdsToAdd }),
+        signal,
+      });
 
-      if (songIdsToRemove && songIdsToRemove.length > 0) {
-        const removeParams = songIdsToRemove.map((id) => `id=${id + 1}`).join('&');
-        await fetch(`${this.baseUrl}/api/playlist/${playlistId}/tracks?${removeParams}`, {
-          method: 'DELETE',
-          headers: {
-            'x-nd-authorization': `Bearer ${this._ndToken}`,
-            'x-nd-client-unique-id': `${this._ndClientId}`,
-          },
-          signal,
-        });
+      if (!addResponse.ok) {
+        throw new NavidromeApiError(
+          `Failed to add tracks to playlist: ${addResponse.status} ${addResponse.statusText}`,
+          `/api/playlist/${playlistId}/tracks`,
+          addResponse.status,
+        );
       }
-
-      return { success: true };
-    } catch {
-      return { success: false };
     }
+
+    if (songIdsToRemove && songIdsToRemove.length > 0) {
+      const removeParams = songIdsToRemove.map((id) => `id=${id + 1}`).join('&');
+      const removeResponse = await fetch(`${this.baseUrl}/api/playlist/${playlistId}/tracks?${removeParams}`, {
+        method: 'DELETE',
+        headers: {
+          'x-nd-authorization': `Bearer ${this._ndToken}`,
+          'x-nd-client-unique-id': `${this._ndClientId}`,
+        },
+        signal,
+      });
+
+      if (!removeResponse.ok) {
+        throw new NavidromeApiError(
+          `Failed to remove tracks from playlist: ${removeResponse.status} ${removeResponse.statusText}`,
+          `/api/playlist/${playlistId}/tracks`,
+          removeResponse.status,
+        );
+      }
+    }
+
+    return { success: true };
   }
 
   async replacePlaylistSongs(playlistId: string, newSongIds: string[], signal?: AbortSignal): Promise<{ success: boolean }> {
-    try {
-      const playlistData = await this.getPlaylist(playlistId, signal);
-      const entryIdsToRemove = playlistData.tracks.map((_, index) => index);
+    const playlistData = await this.getPlaylist(playlistId, signal);
+    const entryIdsToRemove = playlistData.tracks.map((_, index) => index);
 
-      await this.updatePlaylist(playlistId, newSongIds, entryIdsToRemove, signal);
-      return { success: true };
-    } catch {
-      return { success: false };
-    }
+    await this.updatePlaylist(playlistId, newSongIds, entryIdsToRemove, signal);
+    return { success: true };
   }
 
   async searchByQuery(query: string, options?: SearchOptions, signal?: AbortSignal): Promise<NavidromeNativeSong[]> {
@@ -434,49 +462,99 @@ export class NavidromeApiClient {
       }
     }
 
+    // Final fallback: Subsonic search3 endpoint (broader full-text search)
+    if (songs.length === 0) {
+      songs = await this.searchBySubsonic(cleanedTitle || strippedTitle || title, end, signal);
+    }
+
     return songs;
   }
 
-  async getSongByTitle(title: string): Promise<NavidromeNativeSong | null> {
+  /**
+   * Searches using the Subsonic /rest/search3 endpoint.
+   * This performs a broader full-text search that can find results the native
+   * API title filter misses (e.g. partial matches, alternate spellings).
+   */
+  async searchBySubsonic(query: string, limit: number = 50, signal?: AbortSignal): Promise<NavidromeNativeSong[]> {
     try {
-      const params: Record<string, string | number | undefined> = {
-        title: title,
-        _start: 0,
-        _end: 1,
-      };
+      const url = this._buildSubsonicUrl('/rest/search3', {
+        query,
+        songCount: String(limit),
+        artistCount: '0',
+        albumCount: '0',
+      });
 
-      const response = await this._makeNativeRequest<NavidromeNativeSong[]>('/api/song', params);
-
-      if (Array.isArray(response) && response.length > 0) {
-        return response[0];
+      const response = await fetch(url, { signal });
+      if (!response.ok) {
+        return [];
       }
 
-      return null;
+      const data = await response.json();
+      const subsonicResponse = data['subsonic-response'];
+      if (subsonicResponse?.status !== 'ok') {
+        return [];
+      }
+
+      const searchResult = subsonicResponse?.searchResult3;
+      if (!searchResult?.song || searchResult.song.length === 0) {
+        return [];
+      }
+
+      // Convert Subsonic song format to NavidromeNativeSong format
+      return searchResult.song.map((s: Record<string, unknown>) => ({
+        id: s.id as string,
+        title: s.title as string,
+        artist: s.artist as string,
+        artistId: s.artistId as string || '',
+        album: s.album as string,
+        albumId: s.albumId as string || '',
+        duration: (s.duration as number) || 0,
+        year: s.year as number | undefined,
+        trackNumber: s.track as number | undefined,
+        discNumber: s.discNumber as number | undefined,
+        size: s.size as number | undefined,
+        suffix: s.suffix as string | undefined,
+        bitRate: s.bitRate as number | undefined,
+        genre: s.genre as string | undefined,
+        isrc: s.isrc ? [s.isrc as string] : undefined,
+      })) as NavidromeNativeSong[];
     } catch {
-      return null;
+      return [];
     }
   }
 
-  async getArtistByName(artistName: string): Promise<NavidromeNativeArtist | null> {
-    try {
-      const params: Record<string, string | number | undefined> = {
-        name: artistName,
-        _start: 0,
-        _end: 1,
-      };
+  async getSongByTitle(title: string): Promise<NavidromeNativeSong | null> {
+    const params: Record<string, string | number | undefined> = {
+      title: title,
+      _start: 0,
+      _end: 1,
+    };
 
-      const response = await this._makeNativeRequest<{
-        items: NavidromeNativeArtist[];
-      }>('/api/artist', params);
+    const response = await this._makeNativeRequest<NavidromeNativeSong[]>('/api/song', params);
 
-      if (response.items && response.items.length > 0) {
-        return response.items[0];
-      }
-
-      return null;
-    } catch {
-      return null;
+    if (Array.isArray(response) && response.length > 0) {
+      return response[0];
     }
+
+    return null;
+  }
+
+  async getArtistByName(artistName: string): Promise<NavidromeNativeArtist | null> {
+    const params: Record<string, string | number | undefined> = {
+      name: artistName,
+      _start: 0,
+      _end: 1,
+    };
+
+    const response = await this._makeNativeRequest<{
+      items: NavidromeNativeArtist[];
+    }>('/api/artist', params);
+
+    if (response.items && response.items.length > 0) {
+      return response.items[0];
+    }
+
+    return null;
   }
 
   async getArtist(artistId: string): Promise<NavidromeNativeArtist> {
@@ -497,23 +575,24 @@ export class NavidromeApiClient {
    * @returns Promise resolving to an object with success status and optional error message
    */
   async starSong(songId: string, signal?: AbortSignal): Promise<{ success: boolean; error?: string }> {
-    try {
-      const url = this._buildSubsonicUrl('/rest/star', { id: songId });
-      const response = await fetch(url, { signal });
+    const url = this._buildSubsonicUrl('/rest/star', { id: songId });
+    const response = await fetch(url, { signal });
 
-      if (!response.ok) {
-        return { success: false, error: `HTTP error: ${response.status} ${response.statusText}` };
-      }
-
-      const data = await response.json();
-      if (data['subsonic-response']?.status === 'failed') {
-        return { success: false, error: data['subsonic-response']?.error?.message || 'Star operation failed' };
-      }
-
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    if (!response.ok) {
+      throw new NavidromeApiError(
+        `Failed to star song: ${response.status} ${response.statusText}`,
+        '/rest/star',
+        response.status,
+      );
     }
+
+    const data = await response.json();
+    if (data['subsonic-response']?.status === 'failed') {
+      const errMsg = data['subsonic-response']?.error?.message || 'Star operation failed';
+      throw new NavidromeApiError(errMsg, '/rest/star');
+    }
+
+    return { success: true };
   }
 
   async starSongs(songIds: string[]): Promise<{ success: boolean; error?: string }> {
@@ -521,23 +600,24 @@ export class NavidromeApiClient {
       return { success: true };
     }
 
-    try {
-      const url = this._buildSubsonicUrl('/rest/star', { id: songIds.join(',') });
-      const response = await fetch(url);
+    const url = this._buildSubsonicUrl('/rest/star', { id: songIds.join(',') });
+    const response = await fetch(url);
 
-      if (!response.ok) {
-        return { success: false, error: `HTTP error: ${response.status} ${response.statusText}` };
-      }
-
-      const data = await response.json();
-      if (data['subsonic-response']?.status === 'failed') {
-        return { success: false, error: data['subsonic-response']?.error?.message || 'Star operation failed' };
-      }
-
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    if (!response.ok) {
+      throw new NavidromeApiError(
+        `Failed to star songs: ${response.status} ${response.statusText}`,
+        '/rest/star',
+        response.status,
+      );
     }
+
+    const data = await response.json();
+    if (data['subsonic-response']?.status === 'failed') {
+      const errMsg = data['subsonic-response']?.error?.message || 'Star operation failed';
+      throw new NavidromeApiError(errMsg, '/rest/star');
+    }
+
+    return { success: true };
   }
 
   /**
@@ -548,23 +628,24 @@ export class NavidromeApiClient {
    * @returns Promise resolving to an object with success status and optional error message
    */
   async unstarSong(songId: string): Promise<{ success: boolean; error?: string }> {
-    try {
-      const url = this._buildSubsonicUrl('/rest/unstar', { id: songId });
-      const response = await fetch(url);
+    const url = this._buildSubsonicUrl('/rest/unstar', { id: songId });
+    const response = await fetch(url);
 
-      if (!response.ok) {
-        return { success: false, error: `HTTP error: ${response.status} ${response.statusText}` };
-      }
-
-      const data = await response.json();
-      if (data['subsonic-response']?.status === 'failed') {
-        return { success: false, error: data['subsonic-response']?.error?.message || 'Unstar operation failed' };
-      }
-
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    if (!response.ok) {
+      throw new NavidromeApiError(
+        `Failed to unstar song: ${response.status} ${response.statusText}`,
+        '/rest/unstar',
+        response.status,
+      );
     }
+
+    const data = await response.json();
+    if (data['subsonic-response']?.status === 'failed') {
+      const errMsg = data['subsonic-response']?.error?.message || 'Unstar operation failed';
+      throw new NavidromeApiError(errMsg, '/rest/unstar');
+    }
+
+    return { success: true };
   }
 
   /**

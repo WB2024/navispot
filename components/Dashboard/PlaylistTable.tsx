@@ -443,6 +443,14 @@ export function PlaylistTable({
               />
             </svg>
           </button>
+          {!isExporting && visibleCount > 0 && (
+            <button
+              onClick={onToggleSelectAll}
+              className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 whitespace-nowrap"
+            >
+              {allVisibleSelected ? "Deselect All" : "Select All"}
+            </button>
+          )}
           <span>
             Showing {filteredItems.length} of {allItems.length} playlists
             {selectedIds.size > 0 && !isExporting && (

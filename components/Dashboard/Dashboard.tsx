@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback, useMemo, useRef } from "react"
+import { useEffect, useState, useCallback, useMemo } from "react"
 import { useAuth } from "@/lib/auth/auth-context"
 import { spotifyClient } from "@/lib/spotify/client"
 import { NavidromeApiClient, parseExportMetadata } from "@/lib/navidrome/client"
@@ -40,13 +40,26 @@ import {
   getAllExportData,
   type PlaylistExportData,
   type TrackExportStatus,
+  type CandidateInfo,
 } from "@/lib/export/track-export-cache"
 import { PlaylistTableItem, PlaylistInfo } from "@/types/playlist-table"
+import { usePlaylistExport } from "@/hooks/usePlaylistExport"
 import { TrackMatch } from "@/types/matching"
 import Image from "next/image"
 import NavispotLogo from "@/public/navispot.png"
 
 const LIKED_SONGS_ID = "liked-songs"
+
+function toCandidateInfos(candidates?: import('@/types/navidrome').NavidromeSong[]): CandidateInfo[] | undefined {
+  if (!candidates || candidates.length === 0) return undefined
+  return candidates.map(c => ({
+    id: c.id,
+    title: c.title,
+    artist: c.artist,
+    album: c.album,
+    duration: c.duration,
+  }))
+}
 
 interface PlaylistItem {
   id: string
@@ -86,30 +99,32 @@ export function Dashboard() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [progressState, setProgressState] = useState<ProgressState | null>(null)
   const [likedSongsCount, setLikedSongsCount] = useState<number>(0)
   const [refreshing, setRefreshing] = useState(false)
   const [navidromePlaylists, setNavidromePlaylists] = useState<
     NavidromePlaylist[]
   >([])
 
-  const [isExporting, setIsExporting] = useState(false)
-  const [showConfirmation, setShowConfirmation] = useState(false)
-  const [currentUnmatchedPlaylistId, setCurrentUnmatchedPlaylistId] = useState<
-    string | null
-  >(null)
-  const [unmatchedSongs, setUnmatchedSongs] = useState<UnmatchedSong[]>([])
-  const [selectedPlaylistsStats, setSelectedPlaylistsStats] = useState<
-    SelectedPlaylist[]
-  >([])
+  const {
+    isExporting, setIsExporting,
+    progressState, setProgressState,
+    selectedPlaylistsStats, setSelectedPlaylistsStats,
+    currentUnmatchedPlaylistId, setCurrentUnmatchedPlaylistId,
+    unmatchedSongs, setUnmatchedSongs,
+    showSuccess, setShowSuccess,
+    showCancel, setShowCancel,
+    showCancelConfirmation, setShowCancelConfirmation,
+    showConfirmation, setShowConfirmation,
+    isRematching, setIsRematching,
+    songExportStatus, setSongExportStatus,
+    isExportingRef, abortControllerRef,
+  } = usePlaylistExport()
+
   const [sortColumn, setSortColumn] = useState<"name" | "tracks" | "owner">(
     "name",
   )
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc")
   const [searchQuery, setSearchQuery] = useState("")
-  const [showSuccess, setShowSuccess] = useState(false)
-  const [showCancel, setShowCancel] = useState(false)
-  const [showCancelConfirmation, setShowCancelConfirmation] = useState(false)
   const [checkedPlaylistIds, setCheckedPlaylistIds] = useState<Set<string>>(
     new Set(),
   )
@@ -120,15 +135,9 @@ export function Dashboard() {
   const [loadingPlaylistIds, setLoadingPlaylistIds] = useState<Set<string>>(
     new Set(),
   )
-  const [songExportStatus, setSongExportStatus] = useState<
-    Map<string, Map<string, "waiting" | "exported" | "failed">>
-  >(new Map())
   const [trackExportCache, setTrackExportCache] = useState<
     Map<string, PlaylistExportData>
   >(new Map())
-
-  const isExportingRef = useRef(false)
-  const abortControllerRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     async function fetchData() {
@@ -482,25 +491,29 @@ export function Dashboard() {
 
     const newStatus = new Map<
       string,
-      Map<string, "waiting" | "exported" | "failed">
+      Map<string, { status: "waiting" | "exported" | "failed"; matchedTitle?: string; matchedAlbum?: string; matchedArtist?: string; matchStrategy?: string }>
     >()
 
     selectedIds.forEach((playlistId) => {
       const cachedData = loadPlaylistExportData(playlistId)
       if (cachedData) {
-        const playlistStatus = new Map()
+        const playlistStatus = new Map<string, { status: "waiting" | "exported" | "failed"; matchedTitle?: string; matchedAlbum?: string; matchedArtist?: string; matchStrategy?: string; candidates?: CandidateInfo[] }>()
         const songs = playlistTracksCache.get(playlistId)
         if (songs) {
           songs.forEach((song) => {
             const trackId = song.spotifyTrackId
             if (cachedData.tracks[trackId]) {
               const cachedStatus = cachedData.tracks[trackId]
-              playlistStatus.set(
-                trackId,
-                cachedStatus.status === "matched" ? "exported" : "failed",
-              )
+              playlistStatus.set(trackId, {
+                status: cachedStatus.status === "matched" ? "exported" : "failed",
+                matchedTitle: cachedStatus.matchedTitle,
+                matchedAlbum: cachedStatus.matchedAlbum,
+                matchedArtist: cachedStatus.matchedArtist,
+                matchStrategy: cachedStatus.matchStrategy,
+                candidates: cachedStatus.candidates,
+              })
             } else {
-              playlistStatus.set(trackId, "waiting")
+              playlistStatus.set(trackId, { status: "waiting" })
             }
           })
         }
@@ -678,6 +691,7 @@ export function Dashboard() {
         enableFuzzy: true,
         enableStrict: true,
         fuzzyThreshold: 0.8,
+        concurrency: 3,
       }
 
       for (let i = 0; i < itemsToExport.length; i++) {
@@ -687,10 +701,10 @@ export function Dashboard() {
 
         setSongExportStatus((prev) => {
           const newStatus = new Map(prev)
-          const playlistStatus = new Map()
+          const playlistStatus = new Map<string, { status: "waiting" | "exported" | "failed"; matchedTitle?: string; matchedAlbum?: string; matchedArtist?: string; matchStrategy?: string }>()
           const songs = playlistTracksCache.get(item.id) || []
           songs.forEach((song) => {
-            playlistStatus.set(song.spotifyTrackId, "waiting")
+            playlistStatus.set(song.spotifyTrackId, { status: "waiting" })
           })
           newStatus.set(item.id, playlistStatus)
           return newStatus
@@ -778,9 +792,16 @@ export function Dashboard() {
                     match.status === "matched" ||
                     match.status === "ambiguous"
                   ) {
-                    playlistStatus.set(match.spotifyTrack.id, "exported")
+                    playlistStatus.set(match.spotifyTrack.id, {
+                      status: "exported",
+                      matchedTitle: match.navidromeSong?.title,
+                      matchedAlbum: match.navidromeSong?.album,
+                      matchedArtist: match.navidromeSong?.artist,
+                      matchStrategy: match.matchStrategy,
+                      candidates: toCandidateInfos(match.candidates),
+                    })
                   } else {
-                    playlistStatus.set(match.spotifyTrack.id, "failed")
+                    playlistStatus.set(match.spotifyTrack.id, { status: "failed" })
                   }
                   newStatus.set(item.id, playlistStatus)
                   return newStatus
@@ -837,9 +858,16 @@ export function Dashboard() {
                       match.status === "matched" ||
                       match.status === "ambiguous"
                     ) {
-                      playlistStatus.set(match.spotifyTrack.id, "exported")
+                      playlistStatus.set(match.spotifyTrack.id, {
+                        status: "exported",
+                        matchedTitle: match.navidromeSong?.title,
+                        matchedAlbum: match.navidromeSong?.album,
+                        matchedArtist: match.navidromeSong?.artist,
+                        matchStrategy: match.matchStrategy,
+                        candidates: toCandidateInfos(match.candidates),
+                      })
                     } else {
-                      playlistStatus.set(match.spotifyTrack.id, "failed")
+                      playlistStatus.set(match.spotifyTrack.id, { status: "failed" })
                     }
                     newStatus.set(item.id, playlistStatus)
                     return newStatus
@@ -884,6 +912,10 @@ export function Dashboard() {
                   matchStrategy: match.matchStrategy,
                   matchScore: match.matchScore,
                   matchedAt: new Date().toISOString(),
+                  matchedTitle: match.navidromeSong?.title,
+                  matchedAlbum: match.navidromeSong?.album,
+                  matchedArtist: match.navidromeSong?.artist,
+                  candidates: toCandidateInfos(match.candidates),
                 }
                 tracksData[track.id] = status
 
@@ -918,6 +950,10 @@ export function Dashboard() {
                   matchStrategy: match.matchStrategy,
                   matchScore: match.matchScore,
                   matchedAt: new Date().toISOString(),
+                  matchedTitle: match.navidromeSong?.title,
+                  matchedAlbum: match.navidromeSong?.album,
+                  matchedArtist: match.navidromeSong?.artist,
+                  candidates: toCandidateInfos(match.candidates),
                 }
                 tracksData[track.id] = status
                 if (match.status === "matched") {
@@ -1135,6 +1171,10 @@ export function Dashboard() {
                   matchStrategy: match.matchStrategy,
                   matchScore: match.matchScore,
                   matchedAt: new Date().toISOString(),
+                  matchedTitle: match.navidromeSong?.title,
+                  matchedAlbum: match.navidromeSong?.album,
+                  matchedArtist: match.navidromeSong?.artist,
+                  candidates: toCandidateInfos(match.candidates),
                 }
 
                 if (match.status === "matched") {
@@ -1213,6 +1253,182 @@ export function Dashboard() {
       isExportingRef.current = false
       setIsExporting(false)
       abortControllerRef.current = null
+      try { sessionStorage.removeItem('navispot-export-progress') } catch { /* ignore */ }
+    }
+  }
+
+  const handleSelectCandidate = useCallback((playlistId: string, spotifyTrackId: string, candidate: CandidateInfo) => {
+    // Update the songExportStatus with the user's chosen candidate
+    setSongExportStatus((prev) => {
+      const newStatus = new Map(prev)
+      const playlistStatus = new Map(prev.get(playlistId) || [])
+      const existing = playlistStatus.get(spotifyTrackId)
+      playlistStatus.set(spotifyTrackId, {
+        ...existing,
+        status: "exported",
+        matchedTitle: candidate.title,
+        matchedAlbum: candidate.album,
+        matchedArtist: candidate.artist,
+        matchStrategy: "fuzzy",
+        candidates: existing?.candidates,
+      })
+      newStatus.set(playlistId, playlistStatus)
+      return newStatus
+    })
+
+    // Update the cache
+    const cachedData = loadPlaylistExportData(playlistId)
+    if (cachedData && cachedData.tracks[spotifyTrackId]) {
+      cachedData.tracks[spotifyTrackId] = {
+        ...cachedData.tracks[spotifyTrackId],
+        navidromeSongId: candidate.id,
+        status: "matched",
+        matchedTitle: candidate.title,
+        matchedAlbum: candidate.album,
+        matchedArtist: candidate.artist,
+        matchedAt: new Date().toISOString(),
+      }
+      // Update ambiguous → matched in stats
+      if (cachedData.statistics.ambiguous > 0) {
+        cachedData.statistics.ambiguous--
+        cachedData.statistics.matched++
+      }
+      savePlaylistExportData(playlistId, cachedData)
+      setTrackExportCache((prev) => new Map(prev).set(playlistId, cachedData))
+    }
+  }, [setSongExportStatus, setTrackExportCache])
+
+  const handleRematchUnmatched = async () => {
+    if (!navidrome.credentials || !spotify.token || isExporting || isRematching) return
+
+    setIsRematching(true)
+    try {
+      const navidromeClient = new NavidromeApiClient(
+        navidrome.credentials.url,
+        navidrome.credentials.username,
+        navidrome.credentials.password,
+        navidrome.token ?? undefined,
+        navidrome.clientId ?? undefined,
+      )
+
+      const batchMatcher = createBatchMatcher(spotifyClient, navidromeClient)
+      const matcherOptions: BatchMatcherOptions = {
+        enableISRC: true,
+        enableFuzzy: true,
+        enableStrict: true,
+        fuzzyThreshold: 0.8,
+        concurrency: 3,
+      }
+
+      // Re-match unmatched tracks across all checked playlists
+      for (const playlistId of checkedPlaylistIds) {
+        const cachedData = loadPlaylistExportData(playlistId)
+        if (!cachedData) continue
+
+        // Collect only unmatched track IDs
+        const unmatchedTrackIds = Object.entries(cachedData.tracks)
+          .filter(([, status]) => status.status === 'unmatched')
+          .map(([trackId]) => trackId)
+
+        if (unmatchedTrackIds.length === 0) continue
+
+        // Fetch the actual Spotify track objects for unmatched tracks
+        spotifyClient.setToken(spotify.token)
+        let allTracks: SpotifyTrack[]
+        if (playlistId === LIKED_SONGS_ID) {
+          const saved = await spotifyClient.getAllSavedTracks()
+          allTracks = saved.map((t) => t.track)
+        } else {
+          const pt = await spotifyClient.getAllPlaylistTracks(playlistId)
+          allTracks = pt.map((t) => t.track)
+        }
+
+        const unmatchedTracks = allTracks.filter((t) => unmatchedTrackIds.includes(t.id))
+        if (unmatchedTracks.length === 0) continue
+
+        const result = await batchMatcher.matchTracks(unmatchedTracks, matcherOptions)
+
+        // Update cache with new results
+        const updatedTracks = { ...cachedData.tracks }
+        let matchedCount = cachedData.statistics.matched
+        let unmatchedCount = cachedData.statistics.unmatched
+        const ambiguousCount = cachedData.statistics.ambiguous
+
+        result.matches.forEach((match) => {
+          const trackId = match.spotifyTrack.id
+          const oldStatus = updatedTracks[trackId]
+
+          if (match.status === 'matched' && oldStatus?.status === 'unmatched') {
+            matchedCount++
+            unmatchedCount--
+          }
+
+          updatedTracks[trackId] = {
+            spotifyTrackId: trackId,
+            navidromeSongId: match.navidromeSong?.id,
+            status: match.status,
+            matchStrategy: match.matchStrategy,
+            matchScore: match.matchScore,
+            matchedAt: new Date().toISOString(),
+            matchedTitle: match.navidromeSong?.title,
+            matchedAlbum: match.navidromeSong?.album,
+            matchedArtist: match.navidromeSong?.artist,
+            candidates: toCandidateInfos(match.candidates),
+          }
+        })
+
+        const updatedCache: PlaylistExportData = {
+          ...cachedData,
+          tracks: updatedTracks,
+          statistics: {
+            ...cachedData.statistics,
+            matched: matchedCount,
+            unmatched: unmatchedCount,
+            ambiguous: ambiguousCount,
+          },
+        }
+        savePlaylistExportData(playlistId, updatedCache)
+        setTrackExportCache((prev) => new Map(prev).set(playlistId, updatedCache))
+
+        // Update song export status in UI
+        setSongExportStatus((prev) => {
+          const newStatus = new Map(prev)
+          const playlistStatus = new Map(prev.get(playlistId) || [])
+          result.matches.forEach((match) => {
+            if (match.status === 'matched' || match.status === 'ambiguous') {
+              playlistStatus.set(match.spotifyTrack.id, {
+                status: "exported",
+                matchedTitle: match.navidromeSong?.title,
+                matchedAlbum: match.navidromeSong?.album,
+                matchedArtist: match.navidromeSong?.artist,
+                matchStrategy: match.matchStrategy,
+                candidates: toCandidateInfos(match.candidates),
+              })
+            }
+            // Leave still-unmatched tracks as "failed"
+          })
+          newStatus.set(playlistId, playlistStatus)
+          return newStatus
+        })
+
+        // Update selected playlists stats
+        setSelectedPlaylistsStats((prev) =>
+          prev.map((stat) =>
+            stat.id === playlistId
+              ? {
+                  ...stat,
+                  matched: matchedCount,
+                  unmatched: unmatchedCount,
+                }
+              : stat,
+          ),
+        )
+      }
+    } catch (err) {
+      console.error("Re-match failed:", err)
+      setError(err instanceof Error ? err.message : "Re-match failed")
+    } finally {
+      setIsRematching(false)
     }
   }
 
@@ -1271,10 +1487,19 @@ export function Dashboard() {
       .map((playlist) => {
         const songs = playlistTracksCache.get(playlist.id) || []
         const statusMap = songExportStatus.get(playlist.id)
-        const songsWithStatus = songs.map((song) => ({
-          ...song,
-          exportStatus: statusMap?.get(song.spotifyTrackId) || "waiting",
-        }))
+        const songsWithStatus = songs.map((song) => {
+          const statusEntry = statusMap?.get(song.spotifyTrackId)
+          const status = typeof statusEntry === 'object' ? statusEntry.status : (statusEntry || "waiting")
+          return {
+            ...song,
+            exportStatus: status as "waiting" | "exported" | "failed",
+            matchedTitle: typeof statusEntry === 'object' ? statusEntry.matchedTitle : undefined,
+            matchedAlbum: typeof statusEntry === 'object' ? statusEntry.matchedAlbum : undefined,
+            matchedArtist: typeof statusEntry === 'object' ? statusEntry.matchedArtist : undefined,
+            matchStrategy: typeof statusEntry === 'object' ? statusEntry.matchStrategy : undefined,
+            candidates: typeof statusEntry === 'object' ? statusEntry.candidates : undefined,
+          }
+        })
         return {
           playlistId: playlist.id,
           playlistName: playlist.name,
@@ -1349,7 +1574,13 @@ export function Dashboard() {
   )
 
   const songsSection = (
-    <SongsPanel playlistGroups={playlistGroups} isLoading={loadingTracks} />
+    <SongsPanel
+      playlistGroups={playlistGroups}
+      isLoading={loadingTracks}
+      onRematchUnmatched={handleRematchUnmatched}
+      isRematching={isRematching}
+      onSelectCandidate={handleSelectCandidate}
+    />
   )
 
   const mainTableSection = (

@@ -1,5 +1,13 @@
 import { SpotifyTrack } from '@/types/spotify';
 
+export interface CandidateInfo {
+  id: string;
+  title: string;
+  artist: string;
+  album: string;
+  duration: number;
+}
+
 export interface TrackExportStatus {
   spotifyTrackId: string;
   navidromeSongId?: string;
@@ -7,6 +15,10 @@ export interface TrackExportStatus {
   matchStrategy: 'isrc' | 'fuzzy' | 'strict' | 'none';
   matchScore: number;
   matchedAt: string;
+  matchedTitle?: string;
+  matchedAlbum?: string;
+  matchedArtist?: string;
+  candidates?: CandidateInfo[];
 }
 
 export interface PlaylistExportData {
