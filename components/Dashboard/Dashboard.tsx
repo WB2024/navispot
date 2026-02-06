@@ -297,6 +297,8 @@ export function Dashboard() {
   }, [spotify.isAuthenticated])
 
   const tableItems = useMemo(() => {
+    console.log('[TableItems] Recomputing. playlistCreatedDates size:', playlistCreatedDates.size)
+    
     const playlistItems: PlaylistTableItem[] = playlists.map((playlist) => {
       let exportStatus: "none" | "exported" | "out-of-sync" = "none"
       let navidromePlaylistId: string | undefined
@@ -339,6 +341,11 @@ export function Dashboard() {
         lastExportedAt = cachedData.exportedAt
       }
 
+      const createdAt = playlistCreatedDates.get(playlist.id)
+      if (exportStatus !== 'none' && !createdAt) {
+        console.log('[TableItems] Exported playlist', playlist.id, playlist.name, 'has createdAt:', createdAt)
+      }
+
       return {
         id: playlist.id,
         name: playlist.name,
@@ -352,9 +359,12 @@ export function Dashboard() {
         navidromePlaylistId,
         lastExportedAt,
         public: playlist.public,
-        createdAt: playlistCreatedDates.get(playlist.id),
+        createdAt,
       }
     })
+
+    const withDates = playlistItems.filter(p => p.createdAt).length
+    console.log('[TableItems] Result:', playlistItems.length, 'playlists,', withDates, 'have dates')
 
     if (isExportingRef.current) {
       return playlistItems
@@ -389,25 +399,36 @@ export function Dashboard() {
         .filter((p) => !currentDates.has(p.id))
         .map((p) => p.id)
 
-      if (missingIds.length === 0) return
+      console.log('[DateFetch] Starting fetch for', missingIds.length, 'playlists. Current dates map size:', currentDates.size)
+
+      if (missingIds.length === 0) {
+        console.log('[DateFetch] All playlists already have dates')
+        return
+      }
 
       setFetchingDates(true)
       try {
         spotifyClient.setToken(spotify.token!)
 
         for (const playlistId of missingIds) {
-          if (cancelled) break
+          if (cancelled) {
+            console.log('[DateFetch] Cancelled')
+            break
+          }
 
           try {
             const createdDate = await spotifyClient.getPlaylistCreatedDate(playlistId)
+            console.log('[DateFetch] Fetched date for playlist', playlistId, ':', createdDate)
             if (!cancelled && createdDate) {
               setPlaylistCreatedDates((prev) => {
                 const next = new Map(prev)
                 next.set(playlistId, createdDate)
+                console.log('[DateFetch] Updated state, map now has', next.size, 'entries')
                 return next
               })
             }
-          } catch {
+          } catch (error) {
+            console.warn('[DateFetch] Failed to fetch date for playlist', playlistId, ':', error)
             // Skip playlists that fail (e.g., deleted or access revoked)
           }
         }
